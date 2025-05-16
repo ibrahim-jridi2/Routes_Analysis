@@ -1,0 +1,520 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import os
+import requests
+import folium
+import cloudpickle
+from folium import Marker, PolyLine
+from streamlit_folium import folium_static
+import joblib
+import polyline
+import reverse_geocoder as rg
+import geocoder
+from geopy.geocoders import Nominatim
+from geopy.extra.rate_limiter import RateLimiter
+from datetime import datetime
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from PIL import Image
+import io
+from statistics import mode
+from tensorflow.keras import layers, models
+from sklearn.ensemble import GradientBoostingClassifier
+import onnxruntime as ort
+
+
+# Set page configuration
+st.set_page_config(
+    page_title="Tunisia Road Safety Navigator",
+    page_icon="🚗",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Apply custom styling
+st.markdown("""
+<style>
+    .main-header {
+        font-size: 2.5rem;
+        color: #1E3D59;
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    .sub-header {
+        font-size: 1.5rem;
+        color: #1E3D59;
+        margin-top: 2rem;
+        margin-bottom: 1rem;
+    }
+    .info-box {
+        background-color: #F5F5F5;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .high-risk {
+        color: #FF0000;
+        font-weight: bold;
+    }
+    .medium-risk {
+        color: #FFA500;
+        font-weight: bold;
+    }
+    .low-risk {
+        color: #008000;
+        font-weight: bold;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# App title
+st.markdown("<h1 class='main-header'>Tunisia Road Safety Navigator</h1>", unsafe_allow_html=True)
+st.markdown("Analyze road conditions, predict accident risks, and navigate safely across Tunisia.")
+
+# Sidebar
+with st.sidebar:
+    st.image("https://upload.wikimedia.org/wikipedia/commons/c/ce/Flag_of_Tunisia.svg", width=150)
+    st.markdown("## Navigation Settings")
+    
+    # Mode selection
+    app_mode = st.radio(
+        "Choose Mode:",
+        ["Single Route Analysis", "Multiple Routes Comparison"]
+    )
+
+@st.cache_resource
+def load_models():
+    """Load the trained models"""
+    try:
+        # Load weather classification model
+        weather_model = load_model("weather_cnn_model.h5")
+        
+        # Load ONNX model
+        accident_model = ort.InferenceSession("accident_severity_model.onnx")
+
+        return weather_model, accident_model
+    except Exception as e:
+        st.error(f"Error loading models: {str(e)}")
+        return None, None
+
+
+# Load models
+weather_model, accident_model = load_models()
+
+# Weather labels mapping
+weather_labels_mapping = {
+    0: 'Cloudy',
+    1: 'Foggy',
+    2: 'Rainy',
+    3: 'Shine',
+    4: 'Sunrise'
+}
+
+# Mapping between image labels and accident dataset weather conditions
+weather_mapping = {
+    'Shine': 'Fine no high winds',
+    'Rainy': 'Raining no high winds',
+    'Cloudy': 'Fine no high winds',
+    'Foggy': 'Raining + high winds',
+    'Sunrise': 'Fine no high winds'
+}
+
+# Severity mapping
+severity_mapping = {0: 'Medium', 1: 'High', 2: 'Critical'}
+risk_color_mapping = {'Medium': 'medium-risk', 'High': 'high-risk', 'Critical': 'high-risk'}
+
+def get_current_location():
+    """Get current location with Tunisia focus"""
+    try:
+        tunis_coords = (36.8065, 10.1815)
+        location_name = "Tunis"
+        g = geocoder.ip('me')
+        if g.latlng and 30 < g.latlng[0] < 38 and 7 < g.latlng[1] < 12:
+            loc_info = rg.search(g.latlng)[0]
+            return g.latlng[0], g.latlng[1], loc_info.get('name', 'Tunisie')
+        return tunis_coords[0], tunis_coords[1], location_name
+    except:
+        return 36.8065, 10.1815, "Tunis"
+
+def analyze_image(uploaded_image):
+    """Analyze a single image and predict weather"""
+    try:
+        # Convert the uploaded image to a format the model can process
+        image = Image.open(uploaded_image)
+        image = image.resize((128, 128))
+        img_array = img_to_array(image) / 255.0
+        img_array = np.expand_dims(img_array, axis=0)
+        
+        # Predict weather class
+        weather_pred = weather_model.predict(img_array)
+        weather_class = np.argmax(weather_pred)
+        weather_label = weather_labels_mapping.get(weather_class, "Unknown")
+        weather_confidence = np.max(weather_pred) * 100
+        
+        return weather_label, weather_class, weather_confidence
+    except Exception as e:
+        st.error(f"Error analyzing image: {str(e)}")
+        return "Unknown", 0, 0
+
+def predict_accident_severity(weather_class, location):
+    """Predict accident severity based on weather and location"""
+    try:
+        current_date = datetime.now().toordinal()
+        current_day_of_week = datetime.now().weekday()
+        
+        # Prepare input data for the model
+        # Create data dictionary with the required features
+        input_dict = {
+            'Day_of_Week': [current_day_of_week],
+            'Date': [current_date],
+            'Latitude': [location[0]],
+            'Longitude': [location[1]],
+            'Number_of_Casualties': [3],  # Using fixed values from original code
+            'Number_of_Vehicles': [100],  # Using fixed values from original code
+            'Road_Surface_Conditions': [2],  # Using fixed values from original code
+            'Weather_Conditions': [weather_class]
+        }
+        
+        # Convert to numpy array in the expected format
+        input_df = pd.DataFrame(input_dict)
+        input_np = input_df.to_numpy().astype(np.float32)
+        
+        # Predict severity using ONNX model
+        # Get the input name from the model
+        input_name = accident_model.get_inputs()[0].name
+        
+        # Make prediction
+        output = accident_model.run(None, {input_name: input_np})[0]
+        severity_pred = int(np.argmax(output))
+        
+        severity_label = severity_mapping.get(severity_pred, 'Unknown')
+        return severity_label
+    except Exception as e:
+        st.error(f"Error predicting accident severity: {str(e)}")
+        return "Unknown"
+
+def get_routes(start_coords, end_coords, alternatives=True):
+    """Get route(s) using OSRM"""
+    try:
+        # Debug information
+        st.info(f"Trying to route from {start_coords} to {end_coords}")
+        
+        # Important: OSRM expects coordinates as [longitude, latitude]
+        # Fix the alternatives parameter format
+        alt_param = "alternatives=true" if alternatives else "alternatives=false"
+        url = f"http://router.project-osrm.org/route/v1/driving/{start_coords[1]},{start_coords[0]};{end_coords[1]},{end_coords[0]}?{alt_param}&overview=full&steps=true"
+        
+        # Debug URL
+        st.info(f"Request URL: {url}")
+        
+        # Set a longer timeout for potentially slow responses
+        response = requests.get(url, timeout=30)
+        data = response.json()
+        
+        # Debug response
+        st.info(f"OSRM Response code: {data.get('code')}")
+        
+        if data.get('code') == 'Ok':
+            routes = []
+            colors = ['#1E90FF', '#32CD32', '#9932CC']
+            weights = [5, 4, 3]
+            
+            num_routes = len(data.get('routes', []))
+            st.info(f"Found {num_routes} routes")
+            
+            for i, route in enumerate(data['routes']):
+                route_coords = polyline.decode(route['geometry'])
+                routes.append({
+                    'coords': route_coords,
+                    'distance': route['distance']/1000,
+                    'duration': route['duration']/60,
+                    'color': colors[i % len(colors)],
+                    'weight': weights[i % len(weights)]
+                })
+            return routes
+        else:
+            st.warning(f"Could not find routes. Response: {data}")
+            # Fallback to direct line
+            return None
+    except Exception as e:
+        st.error(f"Routing error: {str(e)}")
+        return None
+
+def create_map(start_coords, end_coords, routes=None, weather_info=None, severity=None):
+    """Create a Folium map with route(s) and markers"""
+    # Center the map between start and end points
+    center_lat = (start_coords[0] + end_coords[0]) / 2
+    center_lon = (start_coords[1] + end_coords[1]) / 2
+    
+    # Create map
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=9, tiles="OpenStreetMap")
+    
+    # Add alternative map layers
+    folium.TileLayer('CartoDB positron', name='Light Map').add_to(m)
+    folium.TileLayer('CartoDB dark_matter', name='Dark Map').add_to(m)
+    folium.TileLayer('Stamen Terrain', name='Terrain Map').add_to(m)
+    
+    # Start marker tooltip with weather info
+    start_tooltip = f"Départ"
+    if weather_info:
+        start_tooltip += f"\nWeather: {weather_info[0]} ({weather_info[1]:.1f}%)"
+        start_tooltip += f"\nRisk: {severity}"
+    
+    # Add markers
+    folium.Marker(
+        start_coords,
+        tooltip=start_tooltip,
+        popup=f"Start: {start_coords[0]:.4f}, {start_coords[1]:.4f}",
+        icon=folium.Icon(color='green', icon='home')
+    ).add_to(m)
+    
+    folium.Marker(
+        end_coords,
+        tooltip="Destination",
+        popup=f"Destination: {end_coords[0]:.4f}, {end_coords[1]:.4f}",
+        icon=folium.Icon(color='red', icon='flag')
+    ).add_to(m)
+    
+    # Add routes if available
+    if routes:
+        for i, route in enumerate(routes):
+            tooltip = f"Option {i+1}: {route['distance']:.1f} km, {route['duration']:.1f} min"
+            
+            folium.PolyLine(
+                route['coords'],
+                color=route['color'],
+                weight=route['weight'],
+                opacity=0.8,
+                tooltip=tooltip,
+                dash_array='5, 5' if i > 0 else None
+            ).add_to(m)
+    else:
+        # Direct line if no route available
+        folium.PolyLine(
+            [start_coords, end_coords],
+            color='gray',
+            weight=3,
+            opacity=0.8,
+            dash_array='5, 5',
+            tooltip="Direct line (no route available)"
+        ).add_to(m)
+    
+    # Add legend
+    legend_html = '''
+    <div style="position: fixed; bottom: 50px; left: 50px; width: 180px;
+                border:2px solid grey; z-index:9999; font-size:14px;
+                background-color:white; padding: 10px;">
+        <b>Legend</b><br>
+        <i style="background:#1E90FF; width:15px; height:15px; display:inline-block;"></i> Main Route<br>
+        <i style="background:#32CD32; width:15px; height:15px; display:inline-block;"></i> Alternative 1<br>
+        <i style="background:#9932CC; width:15px; height:15px; display:inline-block;"></i> Alternative 2<br>
+        <i style="background:green; width:15px; height:15px; display:inline-block;"></i> Current Position<br>
+        <i style="background:red; width:15px; height:15px; display:inline-block;"></i> Destination
+    </div>
+    '''
+    m.get_root().html.add_child(folium.Element(legend_html))
+    
+    # Add layer control
+    folium.LayerControl().add_to(m)
+    
+    return m
+
+def analyze_multiple_images(uploaded_images):
+    """Analyze multiple images and return consolidated data"""
+    weather_classes = []
+    weather_labels = []
+    weather_confidences = []
+    
+    for img in uploaded_images:
+        weather_label, weather_class, weather_confidence = analyze_image(img)
+        weather_classes.append(weather_class)
+        weather_labels.append(weather_label)
+        weather_confidences.append(weather_confidence)
+    
+    # Get most common weather and average confidence
+    if weather_labels:
+        dominant_weather = mode(weather_labels)
+        dominant_class = mode(weather_classes)
+        avg_confidence = sum(weather_confidences) / len(weather_confidences)
+        return dominant_weather, dominant_class, avg_confidence
+    else:
+        return "Unknown", 0, 0
+
+def get_safety_advice(severity):
+    """Get safety advice based on severity"""
+    advice = {
+        'Medium': "Normal driving conditions. Exercise standard caution.",
+        'High': "Hazardous conditions detected. Drive with increased caution and reduce speed.",
+        'Critical': "Extremely dangerous conditions. Consider postponing travel if possible."
+    }
+    return advice.get(severity, "Unable to determine risk level.")
+
+
+# Main app function
+def main():
+    # Get current location
+    current_lat, current_lon, current_location_name = get_current_location()
+    
+    st.markdown("<div class='info-box'>", unsafe_allow_html=True)
+    st.write(f"📍 Your current location: **{current_location_name}** (Lat: {current_lat:.4f}, Lon: {current_lon:.4f})")
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Image upload section
+    st.markdown("<h2 class='sub-header'>Road Condition Analysis</h2>", unsafe_allow_html=True)
+    uploaded_images = st.file_uploader("Upload road/weather images for analysis", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+    
+    # Initialize variables
+    weather_info = None
+    severity = None
+    
+    # Process uploaded images
+    if uploaded_images:
+        with st.spinner("Analyzing road conditions from images..."):
+            # Display uploaded images in a horizontal layout
+            cols = st.columns(min(3, len(uploaded_images)))
+            for i, img in enumerate(uploaded_images):
+                cols[i % len(cols)].image(img, caption=f"Image {i+1}", use_column_width=True)
+            
+            # Analyze images
+            weather_label, weather_class, confidence = analyze_multiple_images(uploaded_images)
+            
+            # Predict accident severity
+            severity = predict_accident_severity(weather_class, (current_lat, current_lon))
+            weather_info = (weather_label, confidence)
+            
+            # Display analysis results
+            st.markdown("<div class='info-box'>", unsafe_allow_html=True)
+            st.write(f"### Analysis Results")
+            st.write(f"🌤️ Detected weather: **{weather_label}** (Confidence: {confidence:.1f}%)")
+            st.markdown(f"🚨 Accident risk: <span class='{risk_color_mapping.get(severity, 'medium-risk')}'>{severity}</span>", unsafe_allow_html=True)
+            st.write(f"⚠️ **Safety advice:** {get_safety_advice(severity)}")
+            st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Navigation section
+    st.markdown("<h2 class='sub-header'>Navigation</h2>", unsafe_allow_html=True)
+    destination = st.text_input("Enter your destination in Tunisia:", "Sousse")
+    
+    if st.button("Find Routes"):
+        with st.spinner("Finding routes..."):
+            # Geocode destination
+            geolocator = Nominatim(user_agent="tunisia_road_safety_app")
+            try:
+                # Add Tunisia as a bias to improve geocoding results
+                dest_location = geolocator.geocode(f"{destination}, Tunisia", 
+                                                  exactly_one=True,
+                                                  country_codes="tn")
+                
+                if not dest_location:
+                    # Try again without country restriction
+                    dest_location = geolocator.geocode(f"{destination}, Tunisia", 
+                                                     exactly_one=True)
+                
+                if dest_location:
+                    dest_coords = (dest_location.latitude, dest_location.longitude)
+                    st.success(f"Found destination: {dest_location.address} at coordinates {dest_coords}")
+                    
+                    # Get routes
+                    routes = get_routes(
+                        (current_lat, current_lon),
+                        dest_coords,
+                        alternatives=(app_mode == "Multiple Routes Comparison")
+                    )
+                    
+                    # Create and display map
+                    st.markdown("<h3 class='sub-header'>Route Map</h3>", unsafe_allow_html=True)
+                    m = create_map(
+                        (current_lat, current_lon),
+                        dest_coords,
+                        routes,
+                        weather_info,
+                        severity
+                    )
+                    folium_static(m, width=800, height=500)
+                    
+                    # Display route information
+                    if routes:
+                        st.markdown("<h3 class='sub-header'>Route Information</h3>", unsafe_allow_html=True)
+                        st.markdown("<div class='info-box'>", unsafe_allow_html=True)
+                        
+                        # Display in table format for multiple routes
+                        if app_mode == "Multiple Routes Comparison":
+                            route_data = []
+                            for i, route in enumerate(routes):
+                                route_type = ["Main Route", "Alternative 1", "Alternative 2"][i % 3]
+                                route_data.append({
+                                    "Option": i+1,
+                                    "Type": route_type,
+                                    "Distance (km)": f"{route['distance']:.1f}",
+                                    "Duration (min)": f"{route['duration']:.1f}"
+                                })
+                            
+                            st.table(pd.DataFrame(route_data))
+                        else:
+                            # Display single route
+                            route = routes[0]
+                            st.write(f"📏 Distance: **{route['distance']:.1f} km**")
+                            st.write(f"⏱️ Estimated travel time: **{route['duration']:.1f} minutes**")
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    else:
+                        # Display fallback direct route information
+                        st.warning("No routes found from OSRM service. Displaying direct line instead.")
+                        st.markdown("<h3 class='sub-header'>Direct Route Information</h3>", unsafe_allow_html=True)
+                        st.markdown("<div class='info-box'>", unsafe_allow_html=True)
+                        
+                        # Calculate direct distance using haversine formula
+                        from math import radians, cos, sin, asin, sqrt
+                        
+                        def haversine(lon1, lat1, lon2, lat2):
+                            # Convert decimal degrees to radians
+                            lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
+                            # Haversine formula
+                            dlon = lon2 - lon1
+                            dlat = lat2 - lat1
+                            a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+                            c = 2 * asin(sqrt(a))
+                            # Radius of earth in kilometers is 6371
+                            km = 6371 * c
+                            return km
+                        
+                        # Calculate direct distance
+                        direct_distance = haversine(current_lon, current_lat, dest_coords[1], dest_coords[0])
+                        # Estimate time (assuming average speed of 60 km/h)
+                        est_time = direct_distance / 60 * 60
+                        
+                        st.write(f"📏 Direct distance: **{direct_distance:.1f} km**")
+                        st.write(f"⏱️ Estimated travel time (direct): **{est_time:.1f} minutes**")
+                        st.write("*Note: This is a straight-line calculation and doesn't account for actual roads.*")
+                        
+                        st.markdown("</div>", unsafe_allow_html=True)
+                else:
+                    st.error(f"Could not find location: {destination}, Tunisia")
+                    st.info("Try a different spelling or a more specific location name.")
+            except Exception as e:
+                st.error(f"Error finding destination: {str(e)}")
+                st.info("Please check your internet connection and try again.")
+    
+    # App explanation
+    with st.expander("How to use this app"):
+        st.write("""
+        ### Tunisia Road Safety Navigator
+        
+        This application helps you navigate safely through Tunisia by:
+        
+        1. **Analyzing road conditions**: Upload images of current road/weather conditions, and our AI will analyze them.
+        2. **Predicting accident risks**: Based on weather conditions, location, and historical accident data.
+        3. **Finding safe routes**: Get multiple route options with safety information.
+        
+        #### Instructions:
+        - Upload one or more images of current road conditions (optional)
+        - Enter your destination in Tunisia
+        - Click "Find Routes" to see navigation options
+        - Review safety recommendations before traveling
+        
+        Stay safe on Tunisia's roads!
+        """)
+
+
+if __name__ == "__main__":
+    main()

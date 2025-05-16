@@ -1,0 +1,696 @@
+import streamlit as st
+import folium
+from folium.plugins import LocateControl, Fullscreen
+from streamlit_folium import folium_static
+import time
+import random
+
+# Add these imports to the top of your file
+from streamlit_js_eval import streamlit_js_eval
+import json
+from folium.plugins import MarkerCluster
+from folium.features import DivIcon
+from branca.element import Figure
+
+# Function to get user's location using browser geolocation
+def get_user_location():
+    try:
+        # Use streamlit_js_eval to get location from browser
+        location_data = streamlit_js_eval(
+            js_expressions="navigator.geolocation.getCurrentPosition(function(position) {"
+            "window.parent.postMessage({type: 'streamlit:setComponentValue', value: {"
+            "'latitude': position.coords.latitude, "
+            "'longitude': position.coords.longitude, "
+            "'accuracy': position.coords.accuracy, "
+            "'speed': position.coords.speed, "
+            "'heading': position.coords.heading"
+            "}, dataType: 'json'}, '*');"
+            "});"
+            "return 'Location request sent';"
+        )
+        return location_data
+    except Exception as e:
+        st.error(f"Error getting location: {str(e)}")
+        return None
+
+# Function to create a dynamic map with real-time location tracking
+def create_dynamic_map(start_coords, end_coords, routes=None, weather_info=None, severity=None):
+    """Create a Folium map with dynamic location tracking and routes"""
+    # Center the map between start and end points
+    center_lat = (start_coords[0] + end_coords[0]) / 2
+    center_lon = (start_coords[1] + end_coords[1]) / 2
+    
+    # Create a Figure object with a specific width and height
+    fig = Figure(width='100%', height=500)
+    
+    # Create map
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=9)
+    fig.add_child(m)
+    
+    # Add alternative map layers
+    folium.TileLayer('CartoDB positron', name='Light Map').add_to(m)
+    folium.TileLayer('CartoDB dark_matter', name='Dark Map').add_to(m)
+    folium.TileLayer('Stamen Terrain', name='Terrain Map').add_to(m)
+    
+    # Add fullscreen control
+    Fullscreen().add_to(m)
+    
+    # Add locate control for real-time location
+    LocateControl(
+        auto_start=True,
+        keep_current_zoom_level=True,
+        strings={'title': 'Show my current location', 'popup': 'You are here'},
+        icon='fa fa-location-arrow',
+        locateOptions={'enableHighAccuracy': True, 'watch': True, 'maxZoom': 15}
+    ).add_to(m)
+    
+    # Start marker tooltip with weather info
+    start_tooltip = f"Départ"
+    if weather_info:
+        start_tooltip += f"\nWeather: {weather_info[0]} ({weather_info[1]:.1f}%)"
+        start_tooltip += f"\nRisk: {severity}"
+    
+    # Add markers
+    start_marker = folium.Marker(
+        start_coords,
+        tooltip=start_tooltip,
+        popup=f"Start: {start_coords[0]:.4f}, {start_coords[1]:.4f}",
+        icon=folium.Icon(color='green', icon='home')
+    ).add_to(m)
+    
+    end_marker = folium.Marker(
+        end_coords,
+        tooltip="Destination",
+        popup=f"Destination: {end_coords[0]:.4f}, {end_coords[1]:.4f}",
+        icon=folium.Icon(color='red', icon='flag')
+    ).add_to(m)
+    
+    # Add user location marker (will be updated dynamically)
+    user_marker = folium.Marker(
+        start_coords,
+        tooltip="Your current location",
+        icon=folium.Icon(color='blue', icon='user', prefix='fa'),
+        zIndexOffset=1000  # Keep this marker on top
+    ).add_to(m)
+    
+    # Add routes if available
+    active_route = None
+    if routes:
+        for i, route in enumerate(routes):
+            tooltip = f"Option {i+1}: {route['distance']:.1f} km, {route['duration']:.1f} min"
+            
+            route_line = folium.PolyLine(
+                route['coords'],
+                color=route['color'],
+                weight=route['weight'],
+                opacity=0.8,
+                tooltip=tooltip,
+                dash_array='5, 5' if i > 0 else None
+            ).add_to(m)
+            
+            # Save the first route for navigation
+            if i == 0:
+                active_route = route
+                # Add direction arrows along the route
+                add_direction_arrows(m, route['coords'], route['color'])
+    else:
+        # Direct line if no route available
+        folium.PolyLine(
+            [start_coords, end_coords],
+            color='gray',
+            weight=3,
+            opacity=0.8,
+            dash_array='5, 5',
+            tooltip="Direct line (no route available)"
+        ).add_to(m)
+    
+    # Add legend
+    legend_html = '''
+    <div style="position: fixed; bottom: 50px; left: 50px; width: 220px;
+                border:2px solid grey; z-index:9999; font-size:14px;
+                background-color:white; padding: 10px;">
+        <b>Legend</b><br>
+        <i style="background:#1E90FF; width:15px; height:15px; display:inline-block;"></i> Main Route<br>
+        <i style="background:#32CD32; width:15px; height:15px; display:inline-block;"></i> Alternative 1<br>
+        <i style="background:#9932CC; width:15px; height:15px; display:inline-block;"></i> Alternative 2<br>
+        <i style="background:green; width:15px; height:15px; display:inline-block;"></i> Start Position<br>
+        <i style="background:blue; width:15px; height:15px; display:inline-block;"></i> Current Position<br>
+        <i style="background:red; width:15px; height:15px; display:inline-block;"></i> Destination
+    </div>
+    '''
+    m.get_root().html.add_child(folium.Element(legend_html))
+    
+    # Add layer control
+    folium.LayerControl().add_to(m)
+    
+    return m, active_route
+
+def add_direction_arrows(m, coordinates, color, arrow_step=4):
+    """Add direction arrows along the route"""
+    for i in range(0, len(coordinates) - 1, arrow_step):
+        p1 = coordinates[i]
+        p2 = coordinates[i + 1]
+        
+        # Skip if points are identical
+        if p1 == p2:
+            continue
+            
+        # Calculate arrow position (midpoint)
+        arrow_lat = (p1[0] + p2[0]) / 2
+        arrow_lon = (p1[1] + p2[1]) / 2
+        
+        # Calculate arrow direction
+        angle = calculate_bearing(p1[0], p1[1], p2[0], p2[1])
+        
+        # Create arrow icon
+        arrow_icon = DivIcon(
+            icon_size=(20, 20),
+            icon_anchor=(10, 10),
+            html=f'<div style="transform: rotate({angle}deg); color: {color};">➤</div>'
+        )
+        
+        # Add arrow marker
+        folium.Marker(
+            [arrow_lat, arrow_lon],
+            icon=arrow_icon
+        ).add_to(m)
+
+def calculate_bearing(lat1, lon1, lat2, lon2):
+    """Calculate the bearing between two points in degrees"""
+    import math
+    
+    # Convert to radians
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+    
+    # Calculate bearing
+    y = math.sin(lon2 - lon1) * math.cos(lat2)
+    x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(lon2 - lon1)
+    initial_bearing = math.atan2(y, x)
+    
+    # Convert to degrees
+    initial_bearing = math.degrees(initial_bearing)
+    compass_bearing = (initial_bearing + 360) % 360
+    
+    return compass_bearing
+
+def find_closest_point_on_route(current_position, route_coords):
+    """Find the closest point on the route to the current position"""
+    from scipy.spatial.distance import cdist
+    import numpy as np
+    
+    # Convert route coordinates to numpy array
+    route_array = np.array(route_coords)
+    
+    # Calculate distances from current position to all route points
+    distances = cdist(np.array([current_position]), route_array, metric='euclidean')[0]
+    
+    # Find the index of the closest point
+    closest_idx = np.argmin(distances)
+    
+    return closest_idx, route_coords[closest_idx]
+
+def get_next_instructions(route_coords, current_idx, lookahead=3):
+    """Get the next few navigation instructions"""
+    instructions = []
+    
+    if current_idx >= len(route_coords) - 1:
+        instructions.append("You have arrived at your destination!")
+        return instructions
+    
+    # Simple bearing change detection for turns
+    current_bearing = None
+    prev_bearing = None
+    
+    for i in range(current_idx, min(current_idx + lookahead + 1, len(route_coords) - 1)):
+        if i > 0:
+            prev_bearing = current_bearing if current_bearing is not None else calculate_bearing(
+                route_coords[i-1][0], route_coords[i-1][1], 
+                route_coords[i][0], route_coords[i][1]
+            )
+            
+            current_bearing = calculate_bearing(
+                route_coords[i][0], route_coords[i][1], 
+                route_coords[i+1][0], route_coords[i+1][1]
+            )
+            
+            # Calculate bearing difference
+            bearing_diff = (current_bearing - prev_bearing + 180) % 360 - 180
+            
+            # Generate instructions based on bearing changes
+            if abs(bearing_diff) < 10:
+                instructions.append("Continue straight")
+            elif bearing_diff > 10 and bearing_diff < 45:
+                instructions.append("Turn slightly right")
+            elif bearing_diff >= 45 and bearing_diff < 135:
+                instructions.append("Turn right")
+            elif bearing_diff >= 135:
+                instructions.append("Make a sharp right turn")
+            elif bearing_diff < -10 and bearing_diff > -45:
+                instructions.append("Turn slightly left")
+            elif bearing_diff <= -45 and bearing_diff > -135:
+                instructions.append("Turn left")
+            elif bearing_diff <= -135:
+                instructions.append("Make a sharp left turn")
+    
+    # If no specific instructions were generated
+    if not instructions:
+        instructions.append("Continue on the current road")
+        
+    # Deduplicate consecutive identical instructions
+    if len(instructions) > 1:
+        unique_instructions = [instructions[0]]
+        for i in range(1, len(instructions)):
+            if instructions[i] != instructions[i-1]:
+                unique_instructions.append(instructions[i])
+        instructions = unique_instructions
+    
+    return instructions
+
+def navigation_mode():
+    """Turn-by-turn navigation mode with real-time location tracking"""
+    st.markdown("<h2 class='sub-header'>Navigation Mode</h2>", unsafe_allow_html=True)
+    
+    # Create container for navigation information
+    nav_info_container = st.container()
+    
+    # Create two columns for the navigation layout
+    nav_col1, nav_col2 = st.columns([2, 1])
+    
+    # Map container in the first column
+    with nav_col1:
+        map_container = st.empty()
+    
+    # Instructions container in the second column
+    with nav_col2:
+        st.markdown("<h3>Turn-by-Turn Instructions</h3>", unsafe_allow_html=True)
+        instructions_container = st.container()
+        progress_container = st.container()
+    
+    # Store session state for navigation
+    if 'nav_active' not in st.session_state:
+        st.session_state.nav_active = False
+    
+    if 'route_progress' not in st.session_state:
+        st.session_state.route_progress = 0.0
+    
+    if 'current_route_idx' not in st.session_state:
+        st.session_state.current_route_idx = 0
+    
+    # Initialize or get route from session
+    route = None
+    if 'active_route' in st.session_state:
+        route = st.session_state.active_route
+    
+    # Initialize or get start/end coordinates from session
+    start_coords = None
+    end_coords = None
+    if 'start_coords' in st.session_state:
+        start_coords = st.session_state.start_coords
+    if 'end_coords' in st.session_state:
+        end_coords = st.session_state.end_coords
+    
+    # Check if we have the necessary data
+    if not route or not start_coords or not end_coords:
+        with nav_info_container:
+            st.warning("Please set your destination and find a route first!")
+        return
+    
+    # Navigation controls
+    with nav_info_container:
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if not st.session_state.nav_active:
+                if st.button("Start Navigation", key="start_nav"):
+                    st.session_state.nav_active = True
+                    st.session_state.route_progress = 0.0
+                    st.session_state.current_route_idx = 0
+                    st.rerun()
+            else:
+                if st.button("Pause Navigation", key="pause_nav"):
+                    st.session_state.nav_active = False
+                    st.rerun()
+        
+        with col2:
+            if st.session_state.nav_active:
+                if st.button("End Navigation", key="end_nav"):
+                    st.session_state.nav_active = False
+                    st.session_state.route_progress = 0.0
+                    st.session_state.current_route_idx = 0
+                    st.rerun()
+        
+        with col3:
+            st.write(f"Distance: **{route['distance']:.1f} km**")
+            st.write(f"Duration: **{route['duration']:.1f} min**")
+    
+    # If navigation is active, update location and instructions
+    if st.session_state.nav_active:
+        try:
+            # In a real app, this would use the actual user's location
+            # For demo purposes, we'll simulate movement along the route
+            
+            # Get simulated or real location
+            if 'use_real_location' in st.session_state and st.session_state.use_real_location:
+                # Use real browser location if available
+                location_data = get_user_location()
+                if location_data and isinstance(location_data, dict) and 'latitude' in location_data:
+                    current_lat = location_data['latitude']
+                    current_lon = location_data['longitude']
+                    current_position = (current_lat, current_lon)
+                    
+                    # Find closest point on route
+                    closest_idx, closest_point = find_closest_point_on_route(current_position, route['coords'])
+                    st.session_state.current_route_idx = closest_idx
+                else:
+                    # Fall back to simulation if real location isn't available
+                    current_idx = min(st.session_state.current_route_idx, len(route['coords']) - 1)
+                    current_position = route['coords'][current_idx]
+            else:
+                # Simulate movement along the route
+                current_idx = min(st.session_state.current_route_idx, len(route['coords']) - 1)
+                current_position = route['coords'][current_idx]
+            
+            # Calculate progress percentage
+            progress_pct = min(100.0, (st.session_state.current_route_idx / (len(route['coords']) - 1)) * 100)
+            st.session_state.route_progress = progress_pct
+            
+            # Update map with current position
+            m, _ = create_dynamic_map(
+                start_coords,
+                end_coords,
+                [route],
+                None,
+                None
+            )
+            
+            # Add current position marker
+            folium.Marker(
+                current_position,
+                tooltip="You are here",
+                popup="Current Location",
+                icon=folium.Icon(color='blue', icon='user', prefix='fa'),
+                zIndexOffset=1000
+            ).add_to(m)
+            
+            # Center map on current position
+            m.location = current_position
+            m.zoom_start = 15
+            
+            # Update map container
+            with map_container:
+                folium_static(m, width=600, height=500)
+            
+            # Get next instructions
+            instructions = get_next_instructions(route['coords'], st.session_state.current_route_idx)
+            
+            # Update instructions container
+            with instructions_container:
+                st.write("### Next steps:")
+                for i, instr in enumerate(instructions[:3]):
+                    st.write(f"{i+1}. {instr}")
+            
+            # Update progress bar
+            with progress_container:
+                st.write("### Route Progress:")
+                st.progress(float(progress_pct) / 100.0)
+                st.write(f"{progress_pct:.1f}% complete")
+                
+                # Display ETA
+                remaining_distance = route['distance'] * (1 - progress_pct/100.0)
+                remaining_time = route['duration'] * (1 - progress_pct/100.0)
+                st.write(f"Remaining: **{remaining_distance:.1f} km** / **{remaining_time:.1f} min**")
+            
+            # For demo purposes, advance position along the route
+            if 'use_real_location' not in st.session_state or not st.session_state.use_real_location:
+                time.sleep(1)  # Short delay to simulate movement
+                st.session_state.current_route_idx = min(
+                    st.session_state.current_route_idx + 1, 
+                    len(route['coords']) - 1
+                )
+                
+                # Check if we've reached the destination
+                if st.session_state.current_route_idx >= len(route['coords']) - 1:
+                    st.success("You have arrived at your destination!")
+                    st.session_state.nav_active = False
+                    time.sleep(2)
+                    st.rerun()
+                
+                # Rerun to update the page
+                time.sleep(0.5)  # Short delay before rerunning
+                st.rerun()
+                
+        except Exception as e:
+            st.error(f"Navigation error: {str(e)}")
+            st.session_state.nav_active = False
+    else:
+        # Display static map when navigation is not active
+        m, _ = create_dynamic_map(
+            start_coords,
+            end_coords,
+            [route],
+            None,
+            None
+        )
+        
+        # Update map container
+        with map_container:
+            folium_static(m, width=600, height=500)
+        
+        # Instructions when navigation is not active
+        with instructions_container:
+            st.info("Start navigation to see turn-by-turn directions.")
+        
+        with progress_container:
+            st.write("### Route Overview:")
+            st.write(f"Total distance: **{route['distance']:.1f} km**")
+            st.write(f"Estimated time: **{route['duration']:.1f} min**")
+
+
+# Now, let's modify the main function to incorporate our navigation mode
+def main():
+    # Get current location
+    current_lat, current_lon, current_location_name = get_current_location()
+    
+    # Store coordinates in session state for navigation
+    if 'start_coords' not in st.session_state:
+        st.session_state.start_coords = (current_lat, current_lon)
+    
+    st.markdown("<div class='info-box'>", unsafe_allow_html=True)
+    st.write(f"📍 Your current location: **{current_location_name}** (Lat: {current_lat:.4f}, Lon: {current_lon:.4f})")
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    # Add tab for different modes
+    tabs = st.tabs(["Route Planning", "Navigation Mode", "Settings"])
+    
+    # Route Planning Tab
+    with tabs[0]:
+        # Image upload section
+        st.markdown("<h2 class='sub-header'>Road Condition Analysis</h2>", unsafe_allow_html=True)
+        uploaded_images = st.file_uploader("Upload road/weather images for analysis", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+        
+        # Initialize variables
+        weather_info = None
+        severity = None
+        
+        # Process uploaded images
+        if uploaded_images:
+            with st.spinner("Analyzing road conditions from images..."):
+                # Display uploaded images in a horizontal layout
+                cols = st.columns(min(3, len(uploaded_images)))
+                for i, img in enumerate(uploaded_images):
+                    cols[i % len(cols)].image(img, caption=f"Image {i+1}", use_column_width=True)
+                
+                # Analyze images
+                weather_label, weather_class, confidence = analyze_multiple_images(uploaded_images)
+                
+                # Predict accident severity
+                severity = predict_accident_severity(weather_class, (current_lat, current_lon))
+                weather_info = (weather_label, confidence)
+                
+                # Display analysis results
+                st.markdown("<div class='info-box'>", unsafe_allow_html=True)
+                st.write(f"### Analysis Results")
+                st.write(f"🌤️ Detected weather: **{weather_label}** (Confidence: {confidence:.1f}%)")
+                st.markdown(f"🚨 Accident risk: <span class='{risk_color_mapping.get(severity, 'medium-risk')}'>{severity}</span>", unsafe_allow_html=True)
+                st.write(f"⚠️ **Safety advice:** {get_safety_advice(severity)}")
+                st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Navigation section
+        st.markdown("<h2 class='sub-header'>Route Planning</h2>", unsafe_allow_html=True)
+        destination = st.text_input("Enter your destination in Tunisia:", "Sousse")
+        
+        if st.button("Find Routes"):
+            with st.spinner("Finding routes..."):
+                # Geocode destination
+                geolocator = Nominatim(user_agent="tunisia_road_safety_app")
+                try:
+                    # Add Tunisia as a bias to improve geocoding results
+                    dest_location = geolocator.geocode(f"{destination}, Tunisia", 
+                                                      exactly_one=True,
+                                                      country_codes="tn")
+                    
+                    if not dest_location:
+                        # Try again without country restriction
+                        dest_location = geolocator.geocode(f"{destination}, Tunisia", 
+                                                         exactly_one=True)
+                    
+                    if dest_location:
+                        dest_coords = (dest_location.latitude, dest_location.longitude)
+                        st.success(f"Found destination: {dest_location.address} at coordinates {dest_coords}")
+                        
+                        # Store end coordinates in session state for navigation
+                        st.session_state.end_coords = dest_coords
+                        
+                        # Get routes
+                        routes = get_routes(
+                            (current_lat, current_lon),
+                            dest_coords,
+                            alternatives=(app_mode == "Multiple Routes Comparison")
+                        )
+                        
+                        # Store active route in session state for navigation
+                        if routes:
+                            st.session_state.active_route = routes[0]
+                        
+                        # Create and display map
+                        st.markdown("<h3 class='sub-header'>Route Map</h3>", unsafe_allow_html=True)
+                        m = create_map(
+                            (current_lat, current_lon),
+                            dest_coords,
+                            routes,
+                            weather_info,
+                            severity
+                        )
+                        folium_static(m, width=800, height=500)
+                        
+                        # Display route information
+                        if routes:
+                            st.markdown("<h3 class='sub-header'>Route Information</h3>", unsafe_allow_html=True)
+                            st.markdown("<div class='info-box'>", unsafe_allow_html=True)
+                            
+                            # Display in table format for multiple routes
+                            if app_mode == "Multiple Routes Comparison":
+                                route_data = []
+                                for i, route in enumerate(routes):
+                                    route_type = ["Main Route", "Alternative 1", "Alternative 2"][i % 3]
+                                    route_data.append({
+                                        "Option": i+1,
+                                        "Type": route_type,
+                                        "Distance (km)": f"{route['distance']:.1f}",
+                                        "Duration (min)": f"{route['duration']:.1f}"
+                                    })
+                                
+                                st.table(pd.DataFrame(route_data))
+                            else:
+                                # Display single route
+                                route = routes[0]
+                                st.write(f"📏 Distance: **{route['distance']:.1f} km**")
+                                st.write(f"⏱️ Estimated travel time: **{route['duration']:.1f} minutes**")
+                                
+                                # Add a button to start navigation
+                                if st.button("Start Navigation"):
+                                    st.session_state.nav_active = True
+                                    st.session_state.route_progress = 0.0
+                                    st.session_state.current_route_idx = 0
+                                    st.switch_page("navigation")  # This will switch to the navigation tab
+                            
+                            st.markdown("</div>", unsafe_allow_html=True)
+                        else:
+                            # Display fallback direct route information
+                            st.warning("No routes found from OSRM service. Displaying direct line instead.")
+                    else:
+                        st.error(f"Could not find location: {destination}, Tunisia")
+                        st.info("Try a different spelling or a more specific location name.")
+                except Exception as e:
+                    st.error(f"Error finding destination: {str(e)}")
+                    st.info("Please check your internet connection and try again.")
+    
+    # Navigation Mode Tab
+    with tabs[1]:
+        navigation_mode()
+    
+    # Settings Tab
+    with tabs[2]:
+        st.markdown("<h2 class='sub-header'>App Settings</h2>", unsafe_allow_html=True)
+        
+        # Location settings
+        st.subheader("Location Settings")
+        
+        # Checkbox to use real browser location
+        use_real_location = st.checkbox("Use real browser location", value=False)
+        if use_real_location:
+            st.info("This will request location access from your browser")
+            # Set session state
+            st.session_state.use_real_location = True
+        else:
+            # Set session state
+            st.session_state.use_real_location = False
+        
+        # Option to manually set location (for testing)
+        manual_location = st.checkbox("Manually set location", value=False)
+        if manual_location:
+            col1, col2 = st.columns(2)
+            with col1:
+                test_lat = st.number_input("Test Latitude", value=current_lat, format="%.6f")
+            with col2:
+                test_lon = st.number_input("Test Longitude", value=current_lon, format="%.6f")
+            
+            if st.button("Set Test Location"):
+                st.session_state.start_coords = (test_lat, test_lon)
+                st.success(f"Test location set to: ({test_lat:.6f}, {test_lon:.6f})")
+        
+        # Map appearance settings
+        st.subheader("Map Settings")
+        
+        # Map style selection
+        map_style = st.selectbox(
+            "Default Map Style",
+            ["OpenStreetMap", "CartoDB Positron", "CartoDB Dark Matter", "Stamen Terrain"]
+        )
+        
+        # Navigation settings
+        st.subheader("Navigation Settings")
+        
+        # Navigation voice options
+        voice_enabled = st.checkbox("Enable voice navigation", value=True)
+        
+        if voice_enabled:
+            voice_language = st.selectbox(
+                "Voice language",
+                ["English", "French", "Arabic"]
+            )
+        
+        # Save settings button
+        if st.button("Save Settings"):
+            st.session_state.map_style = map_style
+            st.session_state.voice_enabled = voice_enabled
+            if voice_enabled:
+                st.session_state.voice_language = voice_language
+            
+            st.success("Settings saved!")
+    
+    # App explanation
+    with st.expander("How to use this app"):
+        st.write("""
+        ### Tunisia Road Safety Navigator
+        
+        This application helps you navigate safely through Tunisia by:
+        
+        1. **Analyzing road conditions**: Upload images of current road/weather conditions, and our AI will analyze them.
+        2. **Predicting accident risks**: Based on weather conditions, location, and historical accident data.
+        3. **Finding safe routes**: Get multiple route options with safety information.
+        4. **Real-time navigation**: Turn-by-turn directions with your current location tracked in real-time.
+        
+        #### Instructions:
+        - Upload one or more images of current road conditions (optional)
+        - Enter your destination in Tunisia
+        - Click "Find Routes" to see navigation options
+        - Switch to "Navigation Mode" tab and click "Start Navigation" for turn-by-turn directions
+        - Review safety recommendations before traveling
+        
+        Stay safe on Tunisia's roads!
+        """)
+
+
+if __name__ == "__main__":
+    main()
