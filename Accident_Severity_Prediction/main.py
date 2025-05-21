@@ -5,10 +5,14 @@ import os
 # Configuration de la page
 st.set_page_config(
     page_title="Tunisia Road Safety Navigator",
-    page_icon="???",
+    page_icon="🚦",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Initialize session state for navigation
+if 'page' not in st.session_state:
+    st.session_state.page = 'home'
 
 # Styles CSS pour le design futuriste
 def load_css():
@@ -39,54 +43,6 @@ def load_css():
             font-family: 'Orbitron', sans-serif;
             letter-spacing: 1px;
         }
-        
-        /* Navigation */
-        .nav-container {
-            display: flex;
-            justify-content: center;
-            margin-bottom: 30px;
-            padding: 10px;
-        }
-        
-        .nav-item {
-            background: linear-gradient(145deg, var(--card-bg), #222222);
-            border-radius: 15px;
-            padding: 15px 30px;
-            margin: 0 10px;
-            text-align: center;
-            box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.37);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            transition: all 0.3s ease;
-        }
-        
-        .nav-item:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px 0 rgba(58, 134, 255, 0.3);
-        }
-        
-        .nav-item.active {
-            background: linear-gradient(145deg, var(--primary), var(--secondary));
-            box-shadow: 0 8px 25px 0 rgba(58, 134, 255, 0.5);
-        }
-        
-        .nav-item i {
-            font-size: 1.5rem;
-            margin-bottom: 8px;
-            display: block;
-        }
-        
-        /* Animation pour les éléments */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .animate {
-            animation: fadeIn 0.5s ease-out forwards;
-        }
-        
-        /* Ajout de la police Orbitron pour le style futuriste */
-        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&display=swap');
         
         /* Logo et titre */
         .app-header {
@@ -121,33 +77,76 @@ def load_css():
             margin: 5px 0 0 0;
         }
         
-        /* Style pour les boutons Streamlit par-dessus nos éléments de navigation personnalisés */
-        div.stButton > button {
-            position: absolute;
-            top: 0;
-            left: 0;
+        /* Style des cartes de navigation */
+        .nav-container {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .nav-card {
+            background: linear-gradient(145deg, var(--card-bg), #222222);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px 0 rgba(58, 134, 255, 0.3);
+        }
+        
+        .nav-card.active {
+            background: linear-gradient(145deg, var(--primary), var(--secondary));
+            box-shadow: 0 8px 25px 0 rgba(58, 134, 255, 0.5);
+        }
+        
+        .nav-icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+        
+        .nav-title {
+            font-weight: bold;
+            color: var(--text);
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        /* Special styling for full-card buttons */
+        .stButton > button {
             width: 100%;
             height: 100%;
             background: transparent;
             border: none;
             color: transparent;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             z-index: 10;
+            cursor: pointer;
         }
         
-        div.stButton > button:hover {
-            background: transparent;
-            border: none;
-        }
-        
-        div.stButton > button:focus {
-            box-shadow: none;
-        }
-        
-        /* Pour les conteneurs des boutons */
-        div.element-container:has(div.stButton > button) {
+        /* Style for navigation column that will contain the card and the button */
+        .nav-column {
             position: relative;
-            margin-top: -80px;  /* Ajuster pour aligner avec le nav-item */
-            z-index: 20;
+            min-height: 150px;
+        }
+        
+        /* Animation pour les éléments */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .animate {
+            animation: fadeIn 0.5s ease-out forwards;
         }
     </style>
     
@@ -170,51 +169,94 @@ def show_header():
     </div>
     """, unsafe_allow_html=True)
 
-# Fonction pour afficher la navigation avec des boutons Streamlit au lieu de JavaScript
+# Fonction de navigation
+def navigate_to(page):
+    st.session_state.page = page
+    
+# Function to create a clickable card that combines HTML and button functionality
+def clickable_card(title, icon, is_active, on_click_page, key):
+    # Create a unique key for this instance
+    container_key = f"{key}_container"
+    
+    # Use a container to hold both elements
+    container = st.container()
+    
+    # Create the button first
+    clicked = st.button(title, key=key)
+    
+    # Handle the click
+    if clicked:
+        navigate_to(on_click_page)
+        st.experimental_rerun()
+    
+    # Create the visual card on top with pointer-events set to none
+    card_class = "nav-card active" if is_active else "nav-card"
+    html = f"""
+    <style>
+        /* Better button styling */
+        .stButton button {{
+            width: 100%;
+            height: 120px;
+            background-color: transparent;
+            color: transparent;
+            border: none;
+            padding: 0;
+            position: relative;
+        }}
+        
+        /* Make the button label transparent */
+        #{key} {{
+            color: transparent !important;
+        }}
+        
+        /* Position the visual card directly on top of the button */
+        #{container_key} {{
+            margin-top: -120px;
+            position: relative;
+            z-index: 1000;
+            pointer-events: none; /* This lets clicks pass through to the button */
+            display: block;
+            width: 100%;
+            height: 120px;
+        }}
+    </style>
+    
+    <div id="{container_key}">
+        <div class="{card_class}">
+            <div class="nav-icon"><i class="fas fa-{icon}"></i></div>
+            <div class="nav-title">{title}</div>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
+    
+    return clicked
+
+# Fonction pour afficher la navigation
 def show_navigation():
-    # Obtenir la page actuelle
-    query_params = st.experimental_get_query_params()
-    current_page = query_params.get("page", ["home"])[0]
+    current_page = st.session_state.page
     
-    # Créer un conteneur pour la navigation
-    nav_cols = st.columns([1, 2, 2, 1])
+    col1, col2, col3, col4 = st.columns([1, 2, 2, 1])
     
-    # Afficher les éléments de navigation sous forme de conteneurs HTML avec des styles
-    with nav_cols[1]:
-        # Navigation - Home
-        is_home_active = current_page == "home"
-        home_class = "nav-item active" if is_home_active else "nav-item"
-        
-        st.markdown(f"""
-        <div class="{home_class}" style="cursor: pointer;" id="nav-home">
-            <i class="fas fa-tachometer-alt"></i>
-            <span>Dashboard</span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Bouton invisible par dessus pour capter le clic
-        if st.button("Dashboard", key="nav_home_btn", help="Aller au tableau de bord", 
-                   use_container_width=True, type="primary" if is_home_active else "secondary"):
-            st.experimental_set_query_params(page="home")
-            st.experimental_rerun()
+    # Dashboard card
+    with col2:
+        clickable_card(
+            title="Dashboard", 
+            icon="tachometer-alt", 
+            is_active=(current_page == 'home'),
+            on_click_page="home",
+            key="home_btn"
+        )
     
-    with nav_cols[2]:
-        # Navigation - Dashboard
-        is_dashboard_active = current_page == "dashboard"
-        dashboard_class = "nav-item active" if is_dashboard_active else "nav-item"
-        
-        st.markdown(f"""
-        <div class="{dashboard_class}" style="cursor: pointer;" id="nav-dashboard">
-            <i class="fas fa-route"></i>
-            <span>Accident Severity</span>
-        </div>
-        """, unsafe_allow_html=True)
-        
-        # Bouton invisible par dessus pour capter le clic
-        if st.button("Accident Severity", key="nav_dashboard_btn", help="Aller à la page de navigation", 
-                   use_container_width=True, type="primary" if is_dashboard_active else "secondary"):
-            st.experimental_set_query_params(page="dashboard")
-            st.experimental_rerun()
+    # Accident Severity card
+    with col3:
+        clickable_card(
+            title="Accident Severity", 
+            icon="route", 
+            is_active=(current_page == 'dashboard'),
+            on_click_page="dashboard",
+            key="dashboard_btn"
+        )
 
 # Add debug function to help locate files
 def debug_file_locations():
@@ -249,10 +291,6 @@ def main():
     # Afficher la navigation
     show_navigation()
     
-    # Déterminer quelle page afficher
-    query_params = st.experimental_get_query_params()
-    page = query_params.get("page", ["home"])[0]
-    
     # Add the current directory to the python path
     current_dir = os.path.dirname(os.path.abspath(__file__))
     if current_dir not in sys.path:
@@ -261,6 +299,9 @@ def main():
     # Debug mode - uncomment if needed
     # if st.checkbox("Show debug info"):
     #    debug_file_locations()
+    
+    # Déterminer quelle page afficher basé sur l'état de session
+    page = st.session_state.page
     
     # Importer et afficher la page appropriée
     if page == "dashboard":

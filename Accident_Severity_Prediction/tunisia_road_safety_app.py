@@ -21,7 +21,7 @@ import base64
 import uuid
 import time
 
-# Set page configuration uniquement si le script est exécuté directement (pas importé)
+# Set page configuration only if the script is executed directly (not imported)
 if __name__ == "__main__":
     st.set_page_config(
         page_title="Tunisia Road Safety Navigator",
@@ -33,7 +33,7 @@ if __name__ == "__main__":
 # Apply custom styling
 st.markdown("""
 <style>
-    /* Palette de couleurs futuriste */
+    /* Futuristic color palette */
     :root {
         --primary: #3a86ff;
         --secondary: #8338ec;
@@ -47,7 +47,7 @@ st.markdown("""
         --danger: #ef476f;
     }
     
-    /* Styles généraux */
+    /* General styles */
     .main {
         background-color: var(--background);
         color: var(--text);
@@ -154,12 +154,10 @@ st.markdown("""
         font-weight: bold;
     }
     
-    /* Personnalisation des éléments Streamlit */
-	.stButton{
-		margin-bottom: 30px;
-		
-
-	}
+    /* Streamlit elements customization */
+    .stButton{
+        margin-bottom: 30px;
+    }
     .stButton button {
         background: linear-gradient(90deg, var(--primary), var(--secondary));
         color: white;
@@ -188,7 +186,7 @@ st.markdown("""
         border: 2px solid white;
     }
     
-    /* Animation pour les éléments */
+    /* Animation for elements */
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(20px); }
         to { opacity: 1; transform: translateY(0); }
@@ -198,11 +196,11 @@ st.markdown("""
         animation: fadeIn 0.5s ease-out forwards;
     }
     
-    /* Ajout de la police Orbitron pour le style futuriste */
+    /* Add Orbitron font for futuristic style */
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&display=swap');
 </style>
 
-<!-- Ajout de Font Awesome pour les icônes -->
+<!-- Add Font Awesome for icons -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 """, unsafe_allow_html=True)
 
@@ -240,22 +238,22 @@ risk_color_mapping = {
     'Critical': 'high-risk'
 }
 
-# Définir les poids de risque pour chaque condition météo
+# Define risk weights for each weather condition
 weather_risk_weights = {
-    'Cloudy': 1.2,    # Nuageux - risque légèrement accru
-    'Foggy': 2.0,     # Brouillard - risque élevé
-    'Rainy': 1.8,     # Pluie - risque modérément élevé
-    'Shine': 1.0,     # Ensoleillé - risque de base
-    'Sunrise': 1.3,   # Lever de soleil - visibilité réduite
-    'Unknown': 1.5    # Inconnu - risque moyen par défaut
+    'Cloudy': 1.2,    # Cloudy - slightly increased risk
+    'Foggy': 2.0,     # Foggy - high risk
+    'Rainy': 1.8,     # Rainy - moderately high risk
+    'Shine': 1.0,     # Sunny - base risk
+    'Sunrise': 1.3,   # Sunrise - reduced visibility
+    'Unknown': 1.5    # Unknown - default medium risk
 }
 
-# Définir les poids de risque pour chaque niveau de gravité d'accident
+# Define risk weights for each accident severity level
 severity_risk_weights = {
-    'Medium': 1.5,    # Risque moyen
-    'High': 2.5,      # Risque élevé
-    'Critical': 4.0,  # Risque critique
-    'Unknown': 2.0    # Inconnu - risque moyen-élevé par défaut
+    'Medium': 1.5,    # Medium risk
+    'High': 2.5,      # High risk
+    'Critical': 4.0,  # Critical risk
+    'Unknown': 2.0    # Unknown - default medium-high risk
 }
 
 @st.cache_data(ttl=300)
@@ -337,32 +335,32 @@ def get_routes(start_coords, end_coords, alternatives=True):
 
 def evaluate_routes(routes, weather_info, severity):
     if not routes or not weather_info or not severity:
-        return 0  # Par défaut, retourne le premier itinéraire si les données sont insuffisantes
+        return 0  # Default to first route if insufficient data
     
     weather_label, weather_confidence = weather_info
     weather_risk = weather_risk_weights.get(weather_label, weather_risk_weights['Unknown'])
     severity_risk = severity_risk_weights.get(severity, severity_risk_weights['Unknown'])
     
-    # Calculer un score pour chaque itinéraire (plus le score est bas, meilleur est l'itinéraire)
+    # Calculate a score for each route (lower score is better)
     route_scores = []
     for i, route in enumerate(routes):
-        # Facteurs de base: distance et durée
-        distance_factor = route['distance'] / 10  # Normaliser la distance (en km)
-        duration_factor = route['duration'] / 60  # Normaliser la durée (en minutes)
+        # Base factors: distance and duration
+        distance_factor = route['distance'] / 10  # Normalize distance (in km)
+        duration_factor = route['duration'] / 60  # Normalize duration (in minutes)
         
-        # Facteur de risque basé sur la météo et la gravité des accidents
+        # Risk factor based on weather and accident severity
         risk_factor = weather_risk * severity_risk
         
-        # Score final (combinaison pondérée des facteurs)
-        # Plus le risque est élevé, plus on pénalise les itinéraires longs
+        # Final score (weighted combination of factors)
+        # Higher risk penalizes longer routes more
         score = (distance_factor * 0.3 + duration_factor * 0.2) * risk_factor
         
         route_scores.append((i, score))
     
-    # Trier les itinéraires par score (du plus bas au plus élevé)
+    # Sort routes by score (lowest to highest)
     route_scores.sort(key=lambda x: x[1])
     
-    # Retourner l'index du meilleur itinéraire
+    # Return index of best route
     return route_scores[0][0]
 
 def create_map(start_coords, end_coords, current_ip_location_coords, routes=None, weather_info=None, severity=None):
@@ -388,37 +386,37 @@ def create_map(start_coords, end_coords, current_ip_location_coords, routes=None
     if current_ip_location_coords:
         folium.Marker(
             current_ip_location_coords, 
-            tooltip="Votre Position IP Actuelle", 
-            popup=f"Position IP: {current_ip_location_coords[0]:.4f}, {current_ip_location_coords[1]:.4f}", 
+            tooltip="Your Current IP Location", 
+            popup=f"IP Position: {current_ip_location_coords[0]:.4f}, {current_ip_location_coords[1]:.4f}", 
             icon=folium.Icon(color='purple', icon='user', prefix='fa')
         ).add_to(m)
 
     if start_coords and end_coords:
-        start_tooltip = "Départ de l'itinéraire"
+        start_tooltip = "Route Start"
         if weather_info:
             start_tooltip += f"\nWeather: {weather_info[0]} ({weather_info[1]:.1f}%)"
             start_tooltip += f"\nRisk: {severity}"
-        folium.Marker(start_coords, tooltip=start_tooltip, popup=f"Départ Itinéraire: {start_coords[0]:.4f}, {start_coords[1]:.4f}", icon=folium.Icon(color='green', icon='play')).add_to(m)
-        folium.Marker(end_coords, tooltip="Destination de l'itinéraire", popup=f"Destination Itinéraire: {end_coords[0]:.4f}, {end_coords[1]:.4f}", icon=folium.Icon(color='red', icon='stop')).add_to(m)
+        folium.Marker(start_coords, tooltip=start_tooltip, popup=f"Route Start: {start_coords[0]:.4f}, {start_coords[1]:.4f}", icon=folium.Icon(color='green', icon='play')).add_to(m)
+        folium.Marker(end_coords, tooltip="Route Destination", popup=f"Route Destination: {end_coords[0]:.4f}, {end_coords[1]:.4f}", icon=folium.Icon(color='red', icon='stop')).add_to(m)
 
     if routes:
-        # Évaluer les itinéraires et obtenir l'index du meilleur itinéraire
+        # Evaluate routes and get index of best route
         best_route_index = evaluate_routes(routes, weather_info, severity)
         
         for i, route_item in enumerate(routes):
             is_best_route = (i == best_route_index)
             
-            # Modifier l'apparence de l'itinéraire recommandé
+            # Modify appearance of recommended route
             route_color = '#FF006E' if is_best_route else route_item['color']
             route_weight = 7 if is_best_route else route_item['weight']
             route_opacity = 1.0 if is_best_route else 0.8
             
-            # Créer un tooltip plus informatif
-            tooltip = f"{'ITINÉRAIRE RECOMMANDÉ: ' if is_best_route else 'Option: '}{route_item['distance']:.1f} km, {route_item['duration']:.1f} min"
+            # Create more informative tooltip
+            tooltip = f"{'RECOMMENDED ROUTE: ' if is_best_route else 'Option: '}{route_item['distance']:.1f} km, {route_item['duration']:.1f} min"
             if is_best_route and weather_info and severity:
-                tooltip += f"\nConditions: {weather_info[0]}, Risque: {severity}"
+                tooltip += f"\nConditions: {weather_info[0]}, Risk: {severity}"
             
-            # Ajouter l'itinéraire à la carte
+            # Add route to map
             route_line = folium.PolyLine(
                 route_item['coords'], 
                 color=route_color, 
@@ -428,22 +426,22 @@ def create_map(start_coords, end_coords, current_ip_location_coords, routes=None
                 dash_array='5, 5' if not is_best_route and i > 0 else None
             ).add_to(m)
             
-            # Ajouter un marqueur mobile pour l'itinéraire recommandé
+            # Add moving marker for recommended route
             if is_best_route:
-                # Ajouter un marqueur au début de l'itinéraire qui sera déplacé
+                # Add marker at start of route that will be moved
                 route_marker_id = f"route_marker_{i}"
                 folium.Marker(
                     route_item['coords'][0],
-                    tooltip="Votre position sur l'itinéraire",
+                    tooltip="Your position on the route",
                     icon=folium.Icon(color='blue', icon='car', prefix='fa'),
-                    popup="Déplacement automatique le long de l'itinéraire recommandé"
+                    popup="Automatically moving along recommended route"
                 ).add_to(m)
                 
-                # Ajouter un script pour déplacer le marqueur le long de l'itinéraire
+                # Add script to move marker along route
                 route_coords_js = [[lat, lng] for lat, lng in route_item['coords']]
                 js_code = f"""
                 <script>
-                // Fonction pour déplacer le marqueur le long de l'itinéraire
+                // Function to move marker along route
                 var routeCoords = {route_coords_js};
                 var currentIdx = 0;
                 var movingMarker = L.marker(routeCoords[0], {{
@@ -458,31 +456,31 @@ def create_map(start_coords, end_coords, current_ip_location_coords, routes=None
                     if (currentIdx < routeCoords.length - 1) {{
                         currentIdx++;
                         movingMarker.setLatLng(routeCoords[currentIdx]);
-                        setTimeout(moveMarker, 300);  // Vitesse de déplacement
+                        setTimeout(moveMarker, 300);  // Movement speed
                     }}
                 }}
                 
-                // Démarrer le déplacement après 2 secondes
+                // Start movement after 2 seconds
                 setTimeout(moveMarker, 2000);
                 </script>
                 """
                 m.get_root().html.add_child(folium.Element(js_code))
     elif start_coords and end_coords:
-        folium.PolyLine([start_coords, end_coords], color='gray', weight=3, opacity=0.8, dash_array='5, 5', tooltip="Ligne directe (pas d'itinéraire OSRM trouvé)").add_to(m)
+        folium.PolyLine([start_coords, end_coords], color='gray', weight=3, opacity=0.8, dash_array='5, 5', tooltip="Direct line (no OSRM route found)").add_to(m)
     
     legend_html = '''
     <div style="position: relative; bottom: 50px; left: 50px; width: 220px;
                 border:2px solid rgba(255, 255, 255, 0.1); z-index:9999; font-size:14px;
                 background-color:rgba(26, 26, 26, 0.8); padding: 10px; border-radius: 10px;
                 box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.37);">
-        <b style="color: #3a86ff;">Légende</b><br>
-        <i class="fa fa-user" style="color:#8338ec; font-size:15px;"></i> Votre Position IP<br>
-        <i class="fa fa-play" style="color:#06d6a0; font-size:15px;"></i> Départ Itinéraire<br>
-        <i class="fa fa-stop" style="color:#ef476f; font-size:15px;"></i> Destination Itinéraire<br>
-        <i class="fa fa-car" style="color:#3a86ff; font-size:15px;"></i> Position sur l'itinéraire<br>
-        <i style="background:#FF006E; width:15px; height:15px; display:inline-block;"></i> Itinéraire Recommandé<br>
-        <i style="background:#1E90FF; width:15px; height:15px; display:inline-block;"></i> Itinéraire Alternatif 1<br>
-        <i style="background:#32CD32; width:15px; height:15px; display:inline-block;"></i> Itinéraire Alternatif 2<br>
+        <b style="color: #3a86ff;">Legend</b><br>
+        <i class="fa fa-user" style="color:#8338ec; font-size:15px;"></i> Your IP Location<br>
+        <i class="fa fa-play" style="color:#06d6a0; font-size:15px;"></i> Route Start<br>
+        <i class="fa fa-stop" style="color:#ef476f; font-size:15px;"></i> Route Destination<br>
+        <i class="fa fa-car" style="color:#3a86ff; font-size:15px;"></i> Position on Route<br>
+        <i style="background:#FF006E; width:15px; height:15px; display:inline-block;"></i> Recommended Route<br>
+        <i style="background:#1E90FF; width:15px; height:15px; display:inline-block;"></i> Alternative Route 1<br>
+        <i style="background:#32CD32; width:15px; height:15px; display:inline-block;"></i> Alternative Route 2<br>
     </div>
     '''
     m.get_root().html.add_child(folium.Element(legend_html))
@@ -497,7 +495,7 @@ def analyze_multiple_images(uploaded_images):
         weather_labels.append(weather_label)
         weather_confidences.append(weather_confidence)
     
-    # Déterminer la classe météo dominante
+    # Determine dominant weather class
     if weather_classes:
         try:
             dominant_class = mode(weather_classes)
@@ -505,56 +503,56 @@ def analyze_multiple_images(uploaded_images):
             avg_confidence = sum(weather_confidences) / len(weather_confidences)
             return dominant_label, dominant_class, avg_confidence
         except:
-            # Si mode() échoue (ex: plusieurs modes), prendre la première classe
+            # If mode() fails (e.g., multiple modes), take first class
             return weather_labels[0], weather_classes[0], weather_confidences[0]
     return "Unknown", 0, 0
 
 def get_safety_advice(severity):
     if severity == "Critical":
-        return "Conditions très dangereuses. Évitez de conduire si possible ou redoublez de prudence."
+        return "Very dangerous conditions. Avoid driving if possible or exercise extreme caution."
     elif severity == "High":
-        return "Risque élevé d'accidents. Conduisez lentement et maintenez une distance de sécurité accrue."
+        return "High accident risk. Drive slowly and maintain increased safety distance."
     elif severity == "Medium":
-        return "Conditions modérément risquées. Restez vigilant et respectez les limitations de vitesse."
+        return "Moderately risky conditions. Stay alert and respect speed limits."
     else:
-        return "Conditions inconnues. Conduisez prudemment."
+        return "Unknown conditions. Drive carefully."
 
 def generate_audio_player(text):
     try:
-        # Créer un fichier temporaire pour l'audio
+        # Create temporary file for audio
         temp_dir = tempfile.gettempdir()
         audio_file = os.path.join(temp_dir, f"audio_{uuid.uuid4()}.mp3")
         
-        # Générer l'audio avec gTTS
-        tts = gTTS(text=text, lang='fr', slow=False)
+        # Generate audio with gTTS
+        tts = gTTS(text=text, lang='en', slow=False)
         tts.save(audio_file)
         
-        # Lire le fichier audio et l'encoder en base64
+        # Read audio file and encode in base64
         with open(audio_file, "rb") as f:
             audio_bytes = f.read()
         audio_b64 = base64.b64encode(audio_bytes).decode()
         
-        # Créer le lecteur audio HTML
+        # Create HTML audio player
         audio_player = f"""
         <div class="audio-container">
             <audio controls autoplay style="width: 100%;">
                 <source src="data:audio/mp3;base64,{audio_b64}" type="audio/mp3">
-                Votre navigateur ne supporte pas l'élément audio.
+                Your browser does not support the audio element.
             </audio>
-            <div style="font-size: 0.8rem; color: var(--text-secondary);">Message vocal automatique</div>
+            <div style="font-size: 0.8rem; color: var(--text-secondary);">Automatic voice message</div>
         </div>
         """
         
-        # Supprimer le fichier temporaire
+        # Delete temporary file
         os.remove(audio_file)
         
         return audio_player
     except Exception as e:
-        st.error(f"Erreur lors de la génération de l'audio: {str(e)}")
+        st.error(f"Error generating audio: {str(e)}")
         return ""
 
 def main():
-    # Initialiser les variables de session
+    # Initialize session variables
     if 'last_osrm_start_coords' not in st.session_state:
         st.session_state.last_osrm_start_coords = None
     if 'last_osrm_dest_coords' not in st.session_state:
@@ -568,88 +566,88 @@ def main():
     if 'best_route_index' not in st.session_state:
         st.session_state.best_route_index = 0
     
-    # Obtenir la position IP actuelle
+    # Get current IP location
     current_ip_lat, current_ip_lon, current_ip_location_name = get_current_location_cached()
     
-    # Conteneur principal avec animation
+    # Main container with animation
     st.markdown("<div class='animate'>", unsafe_allow_html=True)
     
-    # Section d'analyse des conditions météorologiques
-    st.markdown("<h2 class=\"sub-header\"><i class=\"fas fa-cloud-sun\"></i> Analyse des Conditions Météorologiques</h2>", unsafe_allow_html=True)
+    # Weather conditions analysis section
+    st.markdown("<h2 class=\"sub-header\"><i class=\"fas fa-cloud-sun\"></i> Weather Conditions Analysis</h2>", unsafe_allow_html=True)
     
     col1, col2 = st.columns([1, 2])
     
     with col1:
         st.markdown("<div class='info-box'>", unsafe_allow_html=True)
-        st.write("<span class='icon-location'>[POSITION]</span> Position IP détectée: **{}** (Lat: {:.4f}, Lon: {:.4f})".format(
+        st.write("<span class='icon-location'>[LOCATION]</span> Detected IP Location: **{}** (Lat: {:.4f}, Lon: {:.4f})".format(
             current_ip_location_name, current_ip_lat, current_ip_lon
         ), unsafe_allow_html=True)
         
-        uploaded_images = st.file_uploader("Téléchargez des images des conditions météorologiques actuelles", 
+        uploaded_images = st.file_uploader("Upload images of current weather conditions", 
                                          type=["jpg", "jpeg", "png"], 
                                          accept_multiple_files=True)
         
         if uploaded_images:
-            with st.spinner("Analyse des images en cours..."):
+            with st.spinner("Analyzing images..."):
                 weather_label, weather_class, weather_confidence = analyze_multiple_images(uploaded_images)
                 st.session_state.last_weather_info = (weather_label, weather_confidence)
                 
-                # Prédire la gravité des accidents
+                # Predict accident severity
                 severity = predict_accident_severity(weather_class, (current_ip_lat, current_ip_lon))
                 st.session_state.last_severity = severity
                 
-                st.write(f"<span class='icon-weather'>[MÉTÉO]</span> Conditions météo détectées: **{weather_label}** (Confiance: {weather_confidence:.1f}%)", unsafe_allow_html=True)
-                st.write(f"<span class='icon-risk'>[RISQUE]</span> Niveau de risque d'accident prédit: <span class='{risk_color_mapping.get(severity, '')}'>{severity}</span>", unsafe_allow_html=True)
-                st.write(f"<span class='icon-warning'>[CONSEIL]</span> **{get_safety_advice(severity)}**", unsafe_allow_html=True)
+                st.write(f"<span class='icon-weather'>[WEATHER]</span> Detected weather conditions: **{weather_label}** (Confidence: {weather_confidence:.1f}%)", unsafe_allow_html=True)
+                st.write(f"<span class='icon-risk'>[RISK]</span> Predicted accident risk level: <span class='{risk_color_mapping.get(severity, '')}'>{severity}</span>", unsafe_allow_html=True)
+                st.write(f"<span class='icon-warning'>[ADVICE]</span> **{get_safety_advice(severity)}**", unsafe_allow_html=True)
                 
-                # Générer un message audio pour les alertes vocales
+                # Generate audio message for voice alerts
                 if tts_enabled:
-                    safety_speech = f"Alerte de sécurité routière. Conditions météo détectées: {weather_label}. Niveau de risque d'accident: {severity}. {get_safety_advice(severity)}"
+                    safety_speech = f"Road safety alert. Detected weather conditions: {weather_label}. Accident risk level: {severity}. {get_safety_advice(severity)}"
                     safety_audio = generate_audio_player(safety_speech)
                     st.markdown(safety_audio, unsafe_allow_html=True)
         else:
-            st.info("Veuillez télécharger des images des conditions météorologiques actuelles pour l'analyse.")
+            st.info("Please upload images of current weather conditions for analysis.")
         st.markdown("</div>", unsafe_allow_html=True)
     
     with col2:
         st.markdown("<div class='info-box'>", unsafe_allow_html=True)
         if uploaded_images:
-            st.write("### Images analysées")
+            st.write("### Analyzed Images")
             image_cols = st.columns(min(3, len(uploaded_images)))
             for i, img_file in enumerate(uploaded_images):
                 with image_cols[i % 3]:
                     st.image(img_file, caption=f"Image {i+1}", use_column_width=True)
         else:
             st.markdown("""
-            ### Comment ça fonctionne
+            ### How It Works
             
-            1. **Téléchargez des images** des conditions météorologiques actuelles
-            2. Notre **IA analysera** les conditions météo visibles
-            3. Le système **prédit le niveau de risque** d'accident basé sur les conditions
-            4. Vous recevrez des **conseils de sécurité** adaptés
+            1. **Upload images** of current weather conditions
+            2. Our **AI will analyze** visible weather conditions
+            3. The system **predicts accident risk level** based on conditions
+            4. You'll receive **tailored safety advice**
             
-            Pour de meilleurs résultats, téléchargez plusieurs images prises à l'extérieur montrant clairement le ciel et les conditions routières.
+            For best results, upload multiple images taken outdoors clearly showing sky and road conditions.
             """)
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # Section de planification d'itinéraire
-    st.markdown("<h2 class=\"sub-header\"><i class=\"fas fa-route\"></i> Planification d'Itinéraire Sécurisé</h2>", unsafe_allow_html=True)
+    # Route planning section
+    st.markdown("<h2 class=\"sub-header\"><i class=\"fas fa-route\"></i> Safe Route Planning</h2>", unsafe_allow_html=True)
     
     # Create a container for the destination input that won't be overlapped by the map
     with st.container():
         st.markdown("<div class='info-box'>", unsafe_allow_html=True)
-        destination_input = st.text_input("Entrez votre destination en Tunisie", "Hammamet, Tunisia")
+        destination_input = st.text_input("Enter your destination in Tunisia", "Hammamet, Tunisia")
         st.markdown("</div>", unsafe_allow_html=True)
     
     # Create a separate container for the map with some top margin
     with st.container():
         st.markdown("<div style='margin-top:60px;'>", unsafe_allow_html=True)
         
-        if st.button("Trouver les Itinéraires", key="find_routes_btn"):
+        if st.button("Find Routes", key="find_routes_btn"):
             st.session_state.last_osrm_start_coords = (current_ip_lat, current_ip_lon)
             st.session_state.last_routes_data = None
             st.session_state.last_osrm_dest_coords = None
-            with st.spinner("Recherche d'itinéraires..."):
+            with st.spinner("Finding routes..."):
                 geolocator = Nominatim(user_agent="tunisia_road_safety_app_gtts_v1")
                 try:
                     dest_location_obj = geolocator.geocode(f"{destination_input}, Tunisia")
@@ -659,7 +657,7 @@ def main():
                         routes_data = get_routes(st.session_state.last_osrm_start_coords, st.session_state.last_osrm_dest_coords)
                         st.session_state.last_routes_data = routes_data
                         
-                        # Évaluer les itinéraires et obtenir l'index du meilleur itinéraire
+                        # Evaluate routes and get index of best route
                         if routes_data and st.session_state.last_weather_info and st.session_state.last_severity:
                             best_route_index = evaluate_routes(routes_data, st.session_state.last_weather_info, st.session_state.last_severity)
                             st.session_state.best_route_index = best_route_index
@@ -676,54 +674,54 @@ def main():
                             )
                             folium_static(m, width=1200, height=600)
                             
-                            # Afficher les détails des itinéraires avec mise en évidence du meilleur itinéraire
-                            st.markdown("<h3 class=\"sub-header\">Détails des Itinéraires</h3>", unsafe_allow_html=True)
+                            # Display route details with highlighting of best route
+                            st.markdown("<h3 class=\"sub-header\">Route Details</h3>", unsafe_allow_html=True)
                             
                             for i, route in enumerate(routes_data):
                                 is_best_route = (i == st.session_state.best_route_index)
                                 route_class = "recommended-route" if is_best_route else ""
                                 
                                 st.markdown(f"<div class='{route_class}'>", unsafe_allow_html=True)
-                                route_title = f"{'[RECOMMANDÉ] ITINÉRAIRE RECOMMANDÉ' if is_best_route else f'Option {i+1}'}"
+                                route_title = f"{'[RECOMMENDED] RECOMMENDED ROUTE' if is_best_route else f'Option {i+1}'}"
                                 st.markdown(f"### {route_title}")
                                 st.write(f"<span class='icon-road'>[DISTANCE]</span> Distance: **{route['distance']:.1f} km**", unsafe_allow_html=True)
-                                st.write(f"<span class='icon-time'>[DURÉE]</span> Durée estimée: **{route['duration']:.1f} minutes**", unsafe_allow_html=True)
+                                st.write(f"<span class='icon-time'>[DURATION]</span> Estimated duration: **{route['duration']:.1f} minutes**", unsafe_allow_html=True)
                                 
                                 if is_best_route and st.session_state.last_weather_info and st.session_state.last_severity:
                                     weather_label, confidence = st.session_state.last_weather_info
-                                    st.write(f"<span class='icon-weather'>[MÉTÉO]</span> Conditions météo: **{weather_label}** (Confiance: {confidence:.1f}%)", unsafe_allow_html=True)
-                                    st.write(f"<span class='icon-risk'>[RISQUE]</span> Niveau de risque: **{st.session_state.last_severity}**", unsafe_allow_html=True)
-                                    st.write(f"<span class='icon-warning'>[CONSEIL]</span> **Conseil:** {get_safety_advice(st.session_state.last_severity)}", unsafe_allow_html=True)
+                                    st.write(f"<span class='icon-weather'>[WEATHER]</span> Weather conditions: **{weather_label}** (Confidence: {confidence:.1f}%)", unsafe_allow_html=True)
+                                    st.write(f"<span class='icon-risk'>[RISK]</span> Risk level: **{st.session_state.last_severity}**", unsafe_allow_html=True)
+                                    st.write(f"<span class='icon-warning'>[ADVICE]</span> **Advice:** {get_safety_advice(st.session_state.last_severity)}", unsafe_allow_html=True)
                                     
-                                    # Générer un message audio pour l'itinéraire recommandé
+                                    # Generate audio message for recommended route
                                     if is_best_route:
-                                        route_speech = f"Itinéraire recommandé trouvé. Distance: {route['distance']:.1f} kilomètres. Durée estimée: {route['duration']:.1f} minutes. Conditions météo: {weather_label}. {get_safety_advice(st.session_state.last_severity)}"
+                                        route_speech = f"Recommended route found. Distance: {route['distance']:.1f} kilometers. Estimated duration: {route['duration']:.1f} minutes. Weather conditions: {weather_label}. {get_safety_advice(st.session_state.last_severity)}"
                                         route_audio = generate_audio_player(route_speech)
                                         st.markdown(route_audio, unsafe_allow_html=True)
                                 
                                 st.markdown("</div>", unsafe_allow_html=True)
                                 st.markdown("<br>", unsafe_allow_html=True)
                             
-                            # Explication de la logique de sélection d'itinéraire
+                            # Explanation of route selection logic
                             st.markdown("<div class=\"info-box\">", unsafe_allow_html=True)
-                            st.markdown("<h3><span class='icon-brain'>[LOGIQUE]</span> Logique de Sélection d'Itinéraire</h3>", unsafe_allow_html=True)
+                            st.markdown("<h3><span class='icon-brain'>[LOGIC]</span> Route Selection Logic</h3>", unsafe_allow_html=True)
                             st.write("""
-                            L'itinéraire recommandé est sélectionné en fonction de plusieurs facteurs:
-                            - **Distance et durée** du trajet
-                            - **Conditions météorologiques** actuelles (plus risquées: brouillard, pluie)
-                            - **Niveau de risque d'accident** prédit pour la zone
+                            The recommended route is selected based on several factors:
+                            - **Distance and duration** of the trip
+                            - Current **weather conditions** (higher risk: fog, rain)
+                            - Predicted **accident risk level** for the area
                             
-                            Notre algorithme calcule un score de risque pour chaque itinéraire et recommande celui qui offre le meilleur équilibre entre sécurité et efficacité.
+                            Our algorithm calculates a risk score for each route and recommends the one that offers the best balance between safety and efficiency.
                             """)
                             st.markdown("</div>", unsafe_allow_html=True)
                         else:
-                            st.error("Impossible de trouver des itinéraires pour cette destination. Veuillez essayer une autre destination.")
+                            st.error("Could not find routes to this destination. Please try another destination.")
                     else:
-                        st.error(f"Impossible de trouver la localisation: {destination_input}, Tunisia")
+                        st.error(f"Could not find location: {destination_input}, Tunisia")
                 except Exception as e:
-                    st.error(f"Erreur lors de la recherche d'itinéraires: {str(e)}")
+                    st.error(f"Error finding routes: {str(e)}")
         
-        # Afficher la carte avec les données précédentes si disponibles
+        # Display map with previous data if available
         elif st.session_state.last_osrm_start_coords and st.session_state.last_osrm_dest_coords and st.session_state.last_routes_data:
             m = create_map(
                 st.session_state.last_osrm_start_coords, 
@@ -735,12 +733,12 @@ def main():
             )
             folium_static(m, width=1200, height=600)
         else:
-            # Afficher une carte centrée sur la position IP actuelle
+            # Display map centered on current IP location
             m = create_map(None, None, (current_ip_lat, current_ip_lon))
             folium_static(m, width=1200, height=600)
         
         st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)  # Fermer le conteneur principal avec animation
+    st.markdown("</div>", unsafe_allow_html=True)  # Close main container with animation
 
 if __name__ == "__main__":
     main()
