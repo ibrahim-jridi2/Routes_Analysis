@@ -579,7 +579,7 @@ def main():
     
     with col1:
         st.markdown("<div class='info-box'>", unsafe_allow_html=True)
-        st.write("""<div><i class="fa fa-map-marker" style="color: red;"></i> Your location here :</div> **{}** (Lat: {:.4f}, Lon: {:.4f})""".format(
+        st.write("""<div><i class="fa-solid fa-location-dot" style="color : #1669EC;"></i> Your location here :</div> **{}** (Lat: {:.4f}, Lon: {:.4f})""".format(
             current_ip_location_name, current_ip_lat, current_ip_lon
         ), unsafe_allow_html=True)
         
