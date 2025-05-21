@@ -579,7 +579,7 @@ def main():
     
     with col1:
         st.markdown("<div class='info-box'>", unsafe_allow_html=True)
-        st.write("<span class='icon-location'>[LOCATION]</span> Detected IP Location: **{}** (Lat: {:.4f}, Lon: {:.4f})".format(
+        st.write("""<div><i class="fa fa-map-marker" style="color: red;"></i> Your location here :</div> **{}** (Lat: {:.4f}, Lon: {:.4f})""".format(
             current_ip_location_name, current_ip_lat, current_ip_lon
         ), unsafe_allow_html=True)
         
@@ -596,9 +596,9 @@ def main():
                 severity = predict_accident_severity(weather_class, (current_ip_lat, current_ip_lon))
                 st.session_state.last_severity = severity
                 
-                st.write(f"<span class='icon-weather'>[WEATHER]</span> Detected weather conditions: **{weather_label}** (Confidence: {weather_confidence:.1f}%)", unsafe_allow_html=True)
-                st.write(f"<span class='icon-risk'>[RISK]</span> Predicted accident risk level: <span class='{risk_color_mapping.get(severity, '')}'>{severity}</span>", unsafe_allow_html=True)
-                st.write(f"<span class='icon-warning'>[ADVICE]</span> **{get_safety_advice(severity)}**", unsafe_allow_html=True)
+                st.write(f"""<div><i class="fa-solid fa-cloud"></i> Detected weather conditions: **{weather_label}** (Confidence: {weather_confidence:.1f}%)</div> """, unsafe_allow_html=True)
+                st.write(f"""<div><i class="fa-solid fa-circle-exclamation" style="color: red;"></i> Predicted accident risk level: <span class='{risk_color_mapping.get(severity, '')}'>{severity}</span></div>  """, unsafe_allow_html=True)
+                st.write(f"""<div><i class="fa-solid fa-lightbulb" style="color: yellow;"></i>**{get_safety_advice(severity)}**</div> """, unsafe_allow_html=True)
                 
                 # Generate audio message for voice alerts
                 if tts_enabled:
