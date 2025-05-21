@@ -80,7 +80,7 @@ st.markdown("""
         border-radius: 15px;
         padding: 20px;
         box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-        margin-bottom: 20px;
+        margin-bottom: 30px;
         border: 1px solid rgba(255, 255, 255, 0.05);
         backdrop-filter: blur(4px);
         -webkit-backdrop-filter: blur(4px);
@@ -155,6 +155,11 @@ st.markdown("""
     }
     
     /* Personnalisation des éléments Streamlit */
+	.stButton{
+		margin-bottom: 30px;
+		
+
+	}
     .stButton button {
         background: linear-gradient(90deg, var(--primary), var(--secondary));
         color: white;
@@ -330,7 +335,6 @@ def get_routes(start_coords, end_coords, alternatives=True):
         st.error(f"Routing error: {str(e)}")
         return None
 
-# Nouvelle fonction pour évaluer les itinéraires en fonction de la gravité des accidents et de la météo
 def evaluate_routes(routes, weather_info, severity):
     if not routes or not weather_info or not severity:
         return 0  # Par défaut, retourne le premier itinéraire si les données sont insuffisantes
@@ -373,10 +377,13 @@ def create_map(start_coords, end_coords, current_ip_location_coords, routes=None
         center_lat, center_lon = (36.8065, 10.1815)
         zoom_start = 7
 
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start, tiles="CartoDB dark_matter")
-    folium.TileLayer('CartoDB positron', name='Light Map').add_to(m)
+    # Use white background by default
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start, tiles="CartoDB positron")
+    
+    # Add other tile layers as options
     folium.TileLayer('CartoDB dark_matter', name='Dark Map').add_to(m)
     folium.TileLayer('Stamen Terrain', name='Terrain Map').add_to(m)
+    folium.TileLayer('OpenStreetMap', name='Street Map').add_to(m)
 
     if current_ip_location_coords:
         folium.Marker(
@@ -464,7 +471,7 @@ def create_map(start_coords, end_coords, current_ip_location_coords, routes=None
         folium.PolyLine([start_coords, end_coords], color='gray', weight=3, opacity=0.8, dash_array='5, 5', tooltip="Ligne directe (pas d'itinéraire OSRM trouvé)").add_to(m)
     
     legend_html = '''
-    <div style="position: fixed; bottom: 50px; left: 50px; width: 220px;
+    <div style="position: relative; bottom: 50px; left: 50px; width: 220px;
                 border:2px solid rgba(255, 255, 255, 0.1); z-index:9999; font-size:14px;
                 background-color:rgba(26, 26, 26, 0.8); padding: 10px; border-radius: 10px;
                 box-shadow: 0 4px 20px 0 rgba(0, 0, 0, 0.37);">
@@ -628,106 +635,111 @@ def main():
     # Section de planification d'itinéraire
     st.markdown("<h2 class=\"sub-header\"><i class=\"fas fa-route\"></i> Planification d'Itinéraire Sécurisé</h2>", unsafe_allow_html=True)
     
-    # Entrée de destination
-    st.markdown("<div class='info-box'>", unsafe_allow_html=True)
-    destination_input = st.text_input("Entrez votre destination en Tunisie", "Hammamet, Tunisia")
+    # Create a container for the destination input that won't be overlapped by the map
+    with st.container():
+        st.markdown("<div class='info-box'>", unsafe_allow_html=True)
+        destination_input = st.text_input("Entrez votre destination en Tunisie", "Hammamet, Tunisia")
+        st.markdown("</div>", unsafe_allow_html=True)
     
-    map_placeholder = st.empty()
-
-    if st.button("Trouver les Itinéraires", key="find_routes_btn"):
-        st.session_state.last_osrm_start_coords = (current_ip_lat, current_ip_lon)
-        st.session_state.last_routes_data = None
-        st.session_state.last_osrm_dest_coords = None
-        with st.spinner("Recherche d'itinéraires..."):
-            geolocator = Nominatim(user_agent="tunisia_road_safety_app_gtts_v1")
-            try:
-                dest_location_obj = geolocator.geocode(f"{destination_input}, Tunisia")
-                if dest_location_obj:
-                    dest_lat, dest_lon = dest_location_obj.latitude, dest_location_obj.longitude
-                    st.session_state.last_osrm_dest_coords = (dest_lat, dest_lon)
-                    routes_data = get_routes(st.session_state.last_osrm_start_coords, st.session_state.last_osrm_dest_coords)
-                    st.session_state.last_routes_data = routes_data
-                    
-                    # Évaluer les itinéraires et obtenir l'index du meilleur itinéraire
-                    if routes_data and st.session_state.last_weather_info and st.session_state.last_severity:
-                        best_route_index = evaluate_routes(routes_data, st.session_state.last_weather_info, st.session_state.last_severity)
-                        st.session_state.best_route_index = best_route_index
-                    
-                    if routes_data:
-                        m = create_map(
-                            st.session_state.last_osrm_start_coords, 
-                            st.session_state.last_osrm_dest_coords, 
-                            (current_ip_lat, current_ip_lon), 
-                            routes_data, 
-                            st.session_state.last_weather_info, 
-                            st.session_state.last_severity
-                        )
-                        folium_static(m, width=1200, height=600)
+    # Create a separate container for the map with some top margin
+    with st.container():
+        st.markdown("<div style='margin-top:60px;'>", unsafe_allow_html=True)
+        
+        if st.button("Trouver les Itinéraires", key="find_routes_btn"):
+            st.session_state.last_osrm_start_coords = (current_ip_lat, current_ip_lon)
+            st.session_state.last_routes_data = None
+            st.session_state.last_osrm_dest_coords = None
+            with st.spinner("Recherche d'itinéraires..."):
+                geolocator = Nominatim(user_agent="tunisia_road_safety_app_gtts_v1")
+                try:
+                    dest_location_obj = geolocator.geocode(f"{destination_input}, Tunisia")
+                    if dest_location_obj:
+                        dest_lat, dest_lon = dest_location_obj.latitude, dest_location_obj.longitude
+                        st.session_state.last_osrm_dest_coords = (dest_lat, dest_lon)
+                        routes_data = get_routes(st.session_state.last_osrm_start_coords, st.session_state.last_osrm_dest_coords)
+                        st.session_state.last_routes_data = routes_data
                         
-                        # Afficher les détails des itinéraires avec mise en évidence du meilleur itinéraire
-                        st.markdown("<h3 class=\"sub-header\">Détails des Itinéraires</h3>", unsafe_allow_html=True)
+                        # Évaluer les itinéraires et obtenir l'index du meilleur itinéraire
+                        if routes_data and st.session_state.last_weather_info and st.session_state.last_severity:
+                            best_route_index = evaluate_routes(routes_data, st.session_state.last_weather_info, st.session_state.last_severity)
+                            st.session_state.best_route_index = best_route_index
                         
-                        for i, route in enumerate(routes_data):
-                            is_best_route = (i == st.session_state.best_route_index)
-                            route_class = "recommended-route" if is_best_route else ""
+                        if routes_data:
+                            # Create map with white background
+                            m = create_map(
+                                st.session_state.last_osrm_start_coords, 
+                                st.session_state.last_osrm_dest_coords, 
+                                (current_ip_lat, current_ip_lon), 
+                                routes_data, 
+                                st.session_state.last_weather_info, 
+                                st.session_state.last_severity
+                            )
+                            folium_static(m, width=1200, height=600)
                             
-                            st.markdown(f"<div class='{route_class}'>", unsafe_allow_html=True)
-                            route_title = f"{'[RECOMMANDÉ] ITINÉRAIRE RECOMMANDÉ' if is_best_route else f'Option {i+1}'}"
-                            st.markdown(f"### {route_title}")
-                            st.write(f"<span class='icon-road'>[DISTANCE]</span> Distance: **{route['distance']:.1f} km**", unsafe_allow_html=True)
-                            st.write(f"<span class='icon-time'>[DURÉE]</span> Durée estimée: **{route['duration']:.1f} minutes**", unsafe_allow_html=True)
+                            # Afficher les détails des itinéraires avec mise en évidence du meilleur itinéraire
+                            st.markdown("<h3 class=\"sub-header\">Détails des Itinéraires</h3>", unsafe_allow_html=True)
                             
-                            if is_best_route and st.session_state.last_weather_info and st.session_state.last_severity:
-                                weather_label, confidence = st.session_state.last_weather_info
-                                st.write(f"<span class='icon-weather'>[MÉTÉO]</span> Conditions météo: **{weather_label}** (Confiance: {confidence:.1f}%)", unsafe_allow_html=True)
-                                st.write(f"<span class='icon-risk'>[RISQUE]</span> Niveau de risque: **{st.session_state.last_severity}**", unsafe_allow_html=True)
-                                st.write(f"<span class='icon-warning'>[CONSEIL]</span> **Conseil:** {get_safety_advice(st.session_state.last_severity)}", unsafe_allow_html=True)
+                            for i, route in enumerate(routes_data):
+                                is_best_route = (i == st.session_state.best_route_index)
+                                route_class = "recommended-route" if is_best_route else ""
                                 
-                                # Générer un message audio pour l'itinéraire recommandé
-                                if is_best_route:
-                                    route_speech = f"Itinéraire recommandé trouvé. Distance: {route['distance']:.1f} kilomètres. Durée estimée: {route['duration']:.1f} minutes. Conditions météo: {weather_label}. {get_safety_advice(st.session_state.last_severity)}"
-                                    route_audio = generate_audio_player(route_speech)
-                                    st.markdown(route_audio, unsafe_allow_html=True)
+                                st.markdown(f"<div class='{route_class}'>", unsafe_allow_html=True)
+                                route_title = f"{'[RECOMMANDÉ] ITINÉRAIRE RECOMMANDÉ' if is_best_route else f'Option {i+1}'}"
+                                st.markdown(f"### {route_title}")
+                                st.write(f"<span class='icon-road'>[DISTANCE]</span> Distance: **{route['distance']:.1f} km**", unsafe_allow_html=True)
+                                st.write(f"<span class='icon-time'>[DURÉE]</span> Durée estimée: **{route['duration']:.1f} minutes**", unsafe_allow_html=True)
+                                
+                                if is_best_route and st.session_state.last_weather_info and st.session_state.last_severity:
+                                    weather_label, confidence = st.session_state.last_weather_info
+                                    st.write(f"<span class='icon-weather'>[MÉTÉO]</span> Conditions météo: **{weather_label}** (Confiance: {confidence:.1f}%)", unsafe_allow_html=True)
+                                    st.write(f"<span class='icon-risk'>[RISQUE]</span> Niveau de risque: **{st.session_state.last_severity}**", unsafe_allow_html=True)
+                                    st.write(f"<span class='icon-warning'>[CONSEIL]</span> **Conseil:** {get_safety_advice(st.session_state.last_severity)}", unsafe_allow_html=True)
+                                    
+                                    # Générer un message audio pour l'itinéraire recommandé
+                                    if is_best_route:
+                                        route_speech = f"Itinéraire recommandé trouvé. Distance: {route['distance']:.1f} kilomètres. Durée estimée: {route['duration']:.1f} minutes. Conditions météo: {weather_label}. {get_safety_advice(st.session_state.last_severity)}"
+                                        route_audio = generate_audio_player(route_speech)
+                                        st.markdown(route_audio, unsafe_allow_html=True)
+                                
+                                st.markdown("</div>", unsafe_allow_html=True)
+                                st.markdown("<br>", unsafe_allow_html=True)
                             
+                            # Explication de la logique de sélection d'itinéraire
+                            st.markdown("<div class=\"info-box\">", unsafe_allow_html=True)
+                            st.markdown("<h3><span class='icon-brain'>[LOGIQUE]</span> Logique de Sélection d'Itinéraire</h3>", unsafe_allow_html=True)
+                            st.write("""
+                            L'itinéraire recommandé est sélectionné en fonction de plusieurs facteurs:
+                            - **Distance et durée** du trajet
+                            - **Conditions météorologiques** actuelles (plus risquées: brouillard, pluie)
+                            - **Niveau de risque d'accident** prédit pour la zone
+                            
+                            Notre algorithme calcule un score de risque pour chaque itinéraire et recommande celui qui offre le meilleur équilibre entre sécurité et efficacité.
+                            """)
                             st.markdown("</div>", unsafe_allow_html=True)
-                            st.markdown("<br>", unsafe_allow_html=True)
-                        
-                        # Explication de la logique de sélection d'itinéraire
-                        st.markdown("<div class=\"info-box\">", unsafe_allow_html=True)
-                        st.markdown("<h3><span class='icon-brain'>[LOGIQUE]</span> Logique de Sélection d'Itinéraire</h3>", unsafe_allow_html=True)
-                        st.write("""
-                        L'itinéraire recommandé est sélectionné en fonction de plusieurs facteurs:
-                        - **Distance et durée** du trajet
-                        - **Conditions météorologiques** actuelles (plus risquées: brouillard, pluie)
-                        - **Niveau de risque d'accident** prédit pour la zone
-                        
-                        Notre algorithme calcule un score de risque pour chaque itinéraire et recommande celui qui offre le meilleur équilibre entre sécurité et efficacité.
-                        """)
-                        st.markdown("</div>", unsafe_allow_html=True)
+                        else:
+                            st.error("Impossible de trouver des itinéraires pour cette destination. Veuillez essayer une autre destination.")
                     else:
-                        st.error("Impossible de trouver des itinéraires pour cette destination. Veuillez essayer une autre destination.")
-                else:
-                    st.error(f"Impossible de trouver la localisation: {destination_input}, Tunisia")
-            except Exception as e:
-                st.error(f"Erreur lors de la recherche d'itinéraires: {str(e)}")
-    
-    # Afficher la carte avec les données précédentes si disponibles
-    elif st.session_state.last_osrm_start_coords and st.session_state.last_osrm_dest_coords and st.session_state.last_routes_data:
-        m = create_map(
-            st.session_state.last_osrm_start_coords, 
-            st.session_state.last_osrm_dest_coords, 
-            (current_ip_lat, current_ip_lon), 
-            st.session_state.last_routes_data, 
-            st.session_state.last_weather_info, 
-            st.session_state.last_severity
-        )
-        folium_static(m, width=1200, height=600)
-    else:
-        # Afficher une carte centrée sur la position IP actuelle
-        m = create_map(None, None, (current_ip_lat, current_ip_lon))
-        folium_static(m, width=1200, height=600)
-    
-    st.markdown("</div>", unsafe_allow_html=True)
+                        st.error(f"Impossible de trouver la localisation: {destination_input}, Tunisia")
+                except Exception as e:
+                    st.error(f"Erreur lors de la recherche d'itinéraires: {str(e)}")
+        
+        # Afficher la carte avec les données précédentes si disponibles
+        elif st.session_state.last_osrm_start_coords and st.session_state.last_osrm_dest_coords and st.session_state.last_routes_data:
+            m = create_map(
+                st.session_state.last_osrm_start_coords, 
+                st.session_state.last_osrm_dest_coords, 
+                (current_ip_lat, current_ip_lon), 
+                st.session_state.last_routes_data, 
+                st.session_state.last_weather_info, 
+                st.session_state.last_severity
+            )
+            folium_static(m, width=1200, height=600)
+        else:
+            # Afficher une carte centrée sur la position IP actuelle
+            m = create_map(None, None, (current_ip_lat, current_ip_lon))
+            folium_static(m, width=1200, height=600)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)  # Fermer le conteneur principal avec animation
 
 if __name__ == "__main__":

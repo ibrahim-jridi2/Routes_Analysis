@@ -165,7 +165,7 @@ def show_header():
         <div class="app-logo"><i class="fas fa-road"></i></div>
         <div>
             <h1 class="app-title">Tunisia Road Safety Navigator</h1>
-            <p class="app-subtitle">Analyse des conditions routières et navigation sécurisée en Tunisie</p>
+            <p class="app-subtitle">Analysis of road conditions and safe navigation in Tunisia</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -187,13 +187,13 @@ def show_navigation():
         
         st.markdown(f"""
         <div class="{home_class}" style="cursor: pointer;" id="nav-home">
-            <i class="fas fa-route"></i>
-            <span>Navigation</span>
+            <i class="fas fa-tachometer-alt"></i>
+            <span>Dashboard</span>
         </div>
         """, unsafe_allow_html=True)
         
         # Bouton invisible par dessus pour capter le clic
-        if st.button("Navigation", key="nav_home_btn", help="Aller à la page de navigation", 
+        if st.button("Dashboard", key="nav_home_btn", help="Aller au tableau de bord", 
                    use_container_width=True, type="primary" if is_home_active else "secondary"):
             st.experimental_set_query_params(page="home")
             st.experimental_rerun()
@@ -205,13 +205,13 @@ def show_navigation():
         
         st.markdown(f"""
         <div class="{dashboard_class}" style="cursor: pointer;" id="nav-dashboard">
-            <i class="fas fa-tachometer-alt"></i>
-            <span>Tableau de Bord</span>
+            <i class="fas fa-route"></i>
+            <span>Accident Severity</span>
         </div>
         """, unsafe_allow_html=True)
         
         # Bouton invisible par dessus pour capter le clic
-        if st.button("Tableau de Bord", key="nav_dashboard_btn", help="Aller au tableau de bord", 
+        if st.button("Accident Severity", key="nav_dashboard_btn", help="Aller à la page de navigation", 
                    use_container_width=True, type="primary" if is_dashboard_active else "secondary"):
             st.experimental_set_query_params(page="dashboard")
             st.experimental_rerun()
@@ -263,7 +263,7 @@ def main():
     #    debug_file_locations()
     
     # Importer et afficher la page appropriée
-    if page == "home":
+    if page == "dashboard":
         try:
             # Try to import the original app
             try:
@@ -275,7 +275,7 @@ def main():
         except Exception as e:
             st.error(f"Erreur lors du chargement de l'application de navigation: {str(e)}")
             
-    elif page == "dashboard":
+    elif page == "home":
         try:
             # First, we print the dashboard module directly and execute it
             try:
