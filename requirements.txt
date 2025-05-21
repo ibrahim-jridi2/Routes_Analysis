@@ -19,5 +19,8 @@ streamlit-js-eval==0.1.5
 streamlit_TTS==0.0.7
 python-dotenv>=0.21.0
 openai>=1.0.0
+plotly==5.18.0
+matplotlib==3.7.2
+seaborn==0.12.2
 
 # Add your other dependencies here with specific versions

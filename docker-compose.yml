@@ -8,9 +8,10 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - ./:/app
+      - ./Accident_Severity_Prediction:/app/Accident_Severity_Prediction
     environment:
       - PYTHONIOENCODING=utf-8
       - LANG=en_US.UTF-8
       - LC_ALL=en_US.UTF-8
+      - PYTHONPATH=/app
     restart: unless-stopped
